@@ -7,8 +7,8 @@
   "types": "lib/kafkajsconnector.d.ts",
   "scripts": {
     "build": "tsc --declaration",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "format": "prettier --write \\\"src/**/*.ts\\\" \\\"src/tests/**/*.ts\\\"",
+    "test": "mocha -r ts-node/register 'src/tests/test_connector.ts'",
+    "format": "prettier --print-width 160 --tab-width 4 --write 'src/**/*.ts' 'src/tests/**/*.ts'",
     "lint": "tslint -p tsconfig.json",
     "prepare" : "npm run build",
     "prepublishOnly" : "npm test && npm run lint",
@@ -26,7 +26,7 @@
     "url": "https://github.com/doctor3030/kafkajsConnector/issues"
   },
   "homepage": "https://github.com/doctor3030/kafkajsConnector#readme",
-  "devDependencies": {
+  "Dependencies": {
     "kafkajs": "^1.15.0",
     "typescript": "^4.5.4",
     "winston-logger-kafka": "^0.0.10",

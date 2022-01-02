@@ -1,84 +1,90 @@
-import {Kafka, Consumer, LogEntry} from 'kafkajs';
+import { Kafka, Consumer, LogEntry } from "kafkajs";
 import * as Logger from "winston-logger-kafka";
 import * as kafka from "kafkajs";
-import path from "path";
-import {ILogger} from "winston-logger-kafka";
+import { ILogger } from "winston-logger-kafka";
 
 export interface ListenerConfig {
-    consumerConfig: kafka.ConsumerConfig,
-    consumerRunConfig: kafka.ConsumerRunConfig,
-    topics: kafka.ConsumerSubscribeTopic[]
+    consumerConfig: kafka.ConsumerConfig;
+    consumerRunConfig: kafka.ConsumerRunConfig;
+    topics: kafka.ConsumerSubscribeTopic[];
 }
 
 export interface KafkaConnectorConfig {
     clientConfig: kafka.KafkaConfig;
-    producerConfig?: kafka.ProducerConfig,
-    consumerConfig?: kafka.ConsumerConfig,
-    consumerRunConfig?: kafka.ConsumerRunConfig,
-    topics?: kafka.ConsumerSubscribeTopic[],
+    producerConfig?: kafka.ProducerConfig;
+    consumerConfig?: kafka.ConsumerConfig;
+    consumerRunConfig?: kafka.ConsumerRunConfig;
+    topics?: kafka.ConsumerSubscribeTopic[];
     loggerConfig: {
-        loggerConfig: Logger.LoggerConfig,
-        sinks?: Logger.Sink[]
-    }
+        loggerConfig: Logger.LoggerConfig;
+        sinks?: Logger.Sink[];
+    };
 }
 
 export class KafkaConnector {
-    public config: KafkaConnectorConfig
+    public config: KafkaConnectorConfig;
     private readonly _kafkaClient: kafka.Kafka;
     private readonly _logger: kafka.Logger;
 
     constructor(config: KafkaConnectorConfig) {
         this.config = config;
-        this.config.clientConfig.logCreator = this.logCreator;
+        function logCreator(logLevel: kafka.logLevel): (entry: LogEntry) => void {
+            let logger: ILogger;
+            if (config.loggerConfig.sinks) {
+                logger = Logger.getLogger(config.loggerConfig.loggerConfig, config.loggerConfig.sinks);
+            } else {
+                logger = Logger.getDefaultLogger(config.loggerConfig.loggerConfig);
+            }
+            // const logger = this._logger;
+            return (entry: LogEntry) => {
+                switch (entry.level) {
+                    case kafka.logLevel.NOTHING:
+                        break;
+                    case kafka.logLevel.ERROR:
+                        logger.error(entry.log.message);
+                        break;
+                    case kafka.logLevel.WARN:
+                        logger.warn(entry.log.message);
+                        break;
+                    case kafka.logLevel.INFO:
+                        logger.info(entry.log.message);
+                        break;
+                    case kafka.logLevel.DEBUG:
+                        logger.debug(entry.log.message);
+                        break;
+                }
+            };
+        }
+
+        this.config.clientConfig.logCreator = logCreator;
         this._kafkaClient = new Kafka(this.config.clientConfig);
         this._logger = this._kafkaClient.logger();
     }
 
-    private logCreator(logLevel: kafka.logLevel): (entry: LogEntry) => void {
-        let logger: ILogger;
-        if (this.config.loggerConfig.sinks) {
-            logger = Logger.getLogger(this.config.loggerConfig.loggerConfig, this.config.loggerConfig.sinks);
-        }
-        else {
-            logger = Logger.getDefaultLogger(this.config.loggerConfig.loggerConfig)
-        }
-        // const logger = this._logger;
-        return (entry: LogEntry) => {
-            switch(entry.level) {
-                case kafka.logLevel.NOTHING:
-                    break;
-                case kafka.logLevel.ERROR:
-                    logger.error(entry.log.message);
-                    break;
-                case kafka.logLevel.WARN:
-                    logger.warn(entry.log.message);
-                    break;
-                case kafka.logLevel.INFO:
-                    logger.info(entry.log.message);
-                    break;
-                case kafka.logLevel.DEBUG:
-                    logger.debug(entry.log.message);
-                    break;
-            }
-        }
-    }
-
     public getListener() {
-        if (!this.config.consumerConfig) { throw Error('Consumer config is not defined.') }
-        if (!this.config.consumerRunConfig) { throw Error('Consumer run config is not defined.') }
-        if (!this.config.topics) { throw Error('Topics are not defined.') }
+        if (!this.config.consumerConfig) {
+            throw Error("Consumer config is not defined.");
+        }
+        if (!this.config.consumerRunConfig) {
+            throw Error("Consumer run config is not defined.");
+        }
+        if (!this.config.topics) {
+            throw Error("Topics are not defined.");
+        }
 
-        let conf = {
+        const conf = {
             consumerConfig: this.config.consumerConfig,
             consumerRunConfig: this.config.consumerRunConfig,
-            topics: this.config.topics
-        }
-        return KafkaListener.create(conf, this._kafkaClient, this._logger)
+            topics: this.config.topics,
+        };
+        return KafkaListener.create(conf, this._kafkaClient, this._logger);
     }
 
     public getProducer() {
-        if (!this.config.producerConfig) { throw Error('Producer config is not defined.') }
-        return KafkaProducer.create(this.config.producerConfig, this._kafkaClient, this._logger)
+        if (!this.config.producerConfig) {
+            throw Error("Producer config is not defined.");
+        }
+        return KafkaProducer.create(this.config.producerConfig, this._kafkaClient, this._logger);
     }
 }
 
@@ -95,22 +101,24 @@ export class KafkaListener {
 
     public async init() {
         this._kafkaConsumer.on(this._kafkaConsumer.events.CONNECT, () => {
-            this._logger.info('Kafka consumer connected.');
-        })
+            this._logger.info("Kafka consumer connected.");
+        });
         await this._kafkaConsumer.connect();
 
-        await Promise.all(this._config.topics.map(async (conf) => {
-            await this._kafkaConsumer.subscribe(conf).then(() => {
-                this._logger.info(`Kafka consumer subscribed to: ${conf.topic}`);
+        await Promise.all(
+            this._config.topics.map(async (conf) => {
+                await this._kafkaConsumer.subscribe(conf).then(() => {
+                    this._logger.info(`Kafka consumer subscribed to: ${conf.topic}`);
+                });
             })
-        }))
-        this._logger.info('Kafka listener started.');
+        );
+        this._logger.info("Kafka listener started.");
     }
 
     public static async create(config: ListenerConfig, kafkaClient: kafka.Kafka, logger: kafka.Logger) {
         const newObject = new KafkaListener(config, kafkaClient, logger);
         await newObject.init();
-        return newObject
+        return newObject;
     }
 
     public async listen() {
@@ -122,9 +130,9 @@ export class KafkaListener {
     }
 
     public async close() {
-        this._logger.info('Closing consumer...');
+        this._logger.info("Closing consumer...");
         await this._kafkaConsumer.disconnect().then((_) => {
-            this._logger.info('Consumer disconnected.')
+            this._logger.info("Consumer disconnected.");
         });
     }
 }
@@ -143,15 +151,15 @@ export class KafkaProducer {
 
     public async init() {
         this._kafkaProducer.on(this._kafkaProducer.events.CONNECT, () => {
-            this._logger.info('Kafka producer connected.');
-        })
+            this._logger.info("Kafka producer connected.");
+        });
         await this._kafkaProducer.connect();
     }
 
     public static async create(config: kafka.ProducerConfig, kafkaClient: kafka.Kafka, logger: kafka.Logger) {
         const newObject = new KafkaProducer(config, kafkaClient, logger);
         await newObject.init();
-        return newObject
+        return newObject;
     }
 
     public async send(record: kafka.ProducerRecord) {
@@ -159,9 +167,9 @@ export class KafkaProducer {
     }
 
     public async close() {
-        this._logger.info('Closing producer...');
+        this._logger.info("Closing producer...");
         await this._kafkaProducer.disconnect().then((_) => {
-            this._logger.info('Producer disconnected.')
+            this._logger.info("Producer disconnected.");
         });
     }
 }
