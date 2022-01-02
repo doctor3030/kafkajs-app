@@ -1,0 +1,24 @@
+{
+  "name": "kafkajsconnector",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/doctor3030/kafkajsConnector.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/doctor3030/kafkajsConnector/issues"
+  },
+  "homepage": "https://github.com/doctor3030/kafkajsConnector#readme",
+  "devDependencies": {
+    "kafkajs": "^1.15.0",
+    "typescript": "^4.5.4",
+    "winston-logger-kafka": "^0.0.9"
+  }
+}
