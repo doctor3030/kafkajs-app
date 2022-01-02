@@ -27,7 +27,7 @@ describe("Kafka connector tests", () => {
 
             async function processMessage(payload: kafkajs.EachMessagePayload) {
                 if (payload.message.value) {
-                    let receivedMessage: Record<string, string> = JSON.parse(payload.message.value.toString());
+                    const receivedMessage: Record<string, string> = JSON.parse(payload.message.value.toString());
                     console.log(`Test message: type: ${typeof TEST_MESSAGE}, message: ${TEST_MESSAGE.msg}`);
                     console.log(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage.msg}`);
                     chai.assert.deepEqual(TEST_MESSAGE, receivedMessage);
