@@ -23,24 +23,24 @@ export interface KafkaConnectorConfig {
 }
 
 export class KafkaConnector {
-    private _config: KafkaConnectorConfig
+    public config: KafkaConnectorConfig
     private readonly _kafkaClient: kafka.Kafka;
     private readonly _logger: kafka.Logger;
 
     constructor(config: KafkaConnectorConfig) {
-        this._config = config;
-        this._config.clientConfig.logCreator = this.logCreator;
-        this._kafkaClient = new Kafka(this._config.clientConfig);
+        this.config = config;
+        this.config.clientConfig.logCreator = this.logCreator;
+        this._kafkaClient = new Kafka(this.config.clientConfig);
         this._logger = this._kafkaClient.logger();
     }
 
     private logCreator(logLevel: kafka.logLevel): (entry: LogEntry) => void {
         let logger: ILogger;
-        if (this._config.loggerConfig.sinks) {
-            logger = Logger.getLogger(this._config.loggerConfig.loggerConfig, this._config.loggerConfig.sinks);
+        if (this.config.loggerConfig.sinks) {
+            logger = Logger.getLogger(this.config.loggerConfig.loggerConfig, this.config.loggerConfig.sinks);
         }
         else {
-            logger = Logger.getDefaultLogger(this._config.loggerConfig.loggerConfig)
+            logger = Logger.getDefaultLogger(this.config.loggerConfig.loggerConfig)
         }
         // const logger = this._logger;
         return (entry: LogEntry) => {
@@ -64,21 +64,21 @@ export class KafkaConnector {
     }
 
     public getListener() {
-        if (!this._config.consumerConfig) { throw Error('Consumer config is not defined.') }
-        if (!this._config.consumerRunConfig) { throw Error('Consumer run config is not defined.') }
-        if (!this._config.topics) { throw Error('Topics are not defined.') }
+        if (!this.config.consumerConfig) { throw Error('Consumer config is not defined.') }
+        if (!this.config.consumerRunConfig) { throw Error('Consumer run config is not defined.') }
+        if (!this.config.topics) { throw Error('Topics are not defined.') }
 
         let conf = {
-            consumerConfig: this._config.consumerConfig,
-            consumerRunConfig: this._config.consumerRunConfig,
-            topics: this._config.topics
+            consumerConfig: this.config.consumerConfig,
+            consumerRunConfig: this.config.consumerRunConfig,
+            topics: this.config.topics
         }
         return KafkaListener.create(conf, this._kafkaClient, this._logger)
     }
 
     public getProducer() {
-        if (!this._config.producerConfig) { throw Error('Producer config is not defined.') }
-        return KafkaProducer.create(this._config.producerConfig, this._kafkaClient, this._logger)
+        if (!this.config.producerConfig) { throw Error('Producer config is not defined.') }
+        return KafkaProducer.create(this.config.producerConfig, this._kafkaClient, this._logger)
     }
 }
 
