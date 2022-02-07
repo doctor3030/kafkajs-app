@@ -24,7 +24,7 @@ export interface KafkaConnectorConfig {
 export class KafkaConnector {
     public config: KafkaConnectorConfig;
     private readonly _kafkaClient: kafka.Kafka;
-    private readonly _logger: kafka.Logger;
+    public readonly logger: kafka.Logger;
 
     constructor(config: KafkaConnectorConfig) {
         this.config = config;
@@ -58,7 +58,7 @@ export class KafkaConnector {
 
         this.config.clientConfig.logCreator = logCreator;
         this._kafkaClient = new Kafka(this.config.clientConfig);
-        this._logger = this._kafkaClient.logger();
+        this.logger = this._kafkaClient.logger();
     }
 
     public getListener() {
@@ -77,14 +77,14 @@ export class KafkaConnector {
             consumerRunConfig: this.config.consumerRunConfig,
             topics: this.config.topics,
         };
-        return KafkaListener.create(conf, this._kafkaClient, this._logger);
+        return KafkaListener.create(conf, this._kafkaClient, this.logger);
     }
 
     public getProducer() {
         if (!this.config.producerConfig) {
             throw Error("Producer config is not defined.");
         }
-        return KafkaProducer.create(this.config.producerConfig, this._kafkaClient, this._logger);
+        return KafkaProducer.create(this.config.producerConfig, this._kafkaClient, this.logger);
     }
 }
 

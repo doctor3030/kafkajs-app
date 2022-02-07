@@ -1,6 +1,6 @@
 // import * as Logger from '../logger';
 // import { Logger as WinstonLogger } from 'winston';
-import * as kafka from "../kafkajsconnector";
+import * as kafka from "../kafka_connector";
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
 import * as chai from "chai";
