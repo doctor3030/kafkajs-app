@@ -85,7 +85,7 @@ export class KafkaApp {
                 const receivedMessage: Message = JSON.parse(_value.toString());
                 // console.log(receivedMessage)
                 if (receivedMessage.event) {
-                    this.logger.info(`Received message: event: ${receivedMessage.event}`);
+                    this.logger.info(`Received message: event: ${receivedMessage.event}, payload: ${receivedMessage.payload}`);
                     // console.log(EVENT_MAP)
                     // console.log(this.config)
                     EVENT_MAP[receivedMessage.event](receivedMessage);
