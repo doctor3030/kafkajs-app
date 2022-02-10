@@ -1,13 +1,13 @@
 {
   "name": "@doctor3030/kafkajsconnector",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Kafka connector based on kafkajs.",
   "files": ["/**/*.js", "/**/*.d.ts"],
   "main": "lib/kafkajsconnector.js",
   "types": "lib/kafkajsconnector.d.ts",
   "scripts": {
     "build": "tsc --declaration",
-    "test": "mocha -r ts-node/register 'src/tests/test_connector.ts'",
+    "test": "mocha -r ts-node/register 'src/tests/test_connector.ts' && mocha -r ts-node/register 'src/tests/test_app.ts'",
     "format": "prettier --print-width 160 --tab-width 4 --write 'src/**/*.ts' 'src/tests/**/*.ts'",
     "lint": "tslint -p tsconfig.json",
     "prepare" : "npm run build",

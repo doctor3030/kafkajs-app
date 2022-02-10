@@ -89,30 +89,30 @@ export class KafkaConnector {
 }
 
 export class KafkaListener {
-    private _config: ListenerConfig;
-    private readonly _logger;
-    private readonly _kafkaConsumer: Consumer;
+    public config: ListenerConfig;
+    public readonly logger;
+    public readonly kafkaConsumer: Consumer;
 
     constructor(config: ListenerConfig, kafkaClient: kafka.Kafka, logger: kafka.Logger) {
-        this._config = config;
-        this._logger = logger;
-        this._kafkaConsumer = kafkaClient.consumer(this._config.consumerConfig);
+        this.config = config;
+        this.logger = logger;
+        this.kafkaConsumer = kafkaClient.consumer(this.config.consumerConfig);
     }
 
-    public async init() {
-        this._kafkaConsumer.on(this._kafkaConsumer.events.CONNECT, () => {
-            this._logger.info("Kafka consumer connected.");
+    private async init() {
+        this.kafkaConsumer.on(this.kafkaConsumer.events.CONNECT, () => {
+            this.logger.info("Kafka consumer connected.");
         });
-        await this._kafkaConsumer.connect();
+        await this.kafkaConsumer.connect();
 
         await Promise.all(
-            this._config.topics.map(async (conf) => {
-                await this._kafkaConsumer.subscribe(conf).then(() => {
-                    this._logger.info(`Kafka consumer subscribed to: ${conf.topic}`);
+            this.config.topics.map(async (conf) => {
+                await this.kafkaConsumer.subscribe(conf).then(() => {
+                    this.logger.info(`Kafka consumer subscribed to: ${conf.topic}`);
                 });
             })
         );
-        this._logger.info("Kafka listener started.");
+        this.logger.info("Kafka listener started.");
     }
 
     public static async create(config: ListenerConfig, kafkaClient: kafka.Kafka, logger: kafka.Logger) {
@@ -123,35 +123,35 @@ export class KafkaListener {
 
     public async listen() {
         try {
-            await this._kafkaConsumer.run(this._config.consumerRunConfig);
+            await this.kafkaConsumer.run(this.config.consumerRunConfig);
         } catch (e: any) {
-            this._logger.error(e.toString());
+            this.logger.error(e.toString());
         }
     }
 
     public async close() {
-        this._logger.info("Closing consumer...");
-        await this._kafkaConsumer.disconnect().then((_) => {
-            this._logger.info("Consumer disconnected.");
+        this.logger.info("Closing consumer...");
+        await this.kafkaConsumer.disconnect().then((_) => {
+            this.logger.info("Consumer disconnected.");
         });
     }
 }
 
 export class KafkaProducer {
-    private readonly _config: kafka.ProducerConfig;
-    private readonly _logger;
+    public readonly config: kafka.ProducerConfig;
+    public readonly logger;
     private readonly _kafkaProducer: kafka.Producer;
 
     constructor(config: kafka.ProducerConfig, kafkaClient: kafka.Kafka, logger: kafka.Logger) {
-        this._config = config;
-        this._logger = logger;
+        this.config = config;
+        this.logger = logger;
         // this._kafkaConsumer = kafkaClient.consumer(this._config.consumerConfig);
-        this._kafkaProducer = kafkaClient.producer(this._config);
+        this._kafkaProducer = kafkaClient.producer(this.config);
     }
 
-    public async init() {
+    private async init() {
         this._kafkaProducer.on(this._kafkaProducer.events.CONNECT, () => {
-            this._logger.info("Kafka producer connected.");
+            this.logger.info("Kafka producer connected.");
         });
         await this._kafkaProducer.connect();
     }
@@ -167,9 +167,9 @@ export class KafkaProducer {
     }
 
     public async close() {
-        this._logger.info("Closing producer...");
+        this.logger.info("Closing producer...");
         await this._kafkaProducer.disconnect().then((_) => {
-            this._logger.info("Producer disconnected.");
+            this.logger.info("Producer disconnected.");
         });
     }
 }
