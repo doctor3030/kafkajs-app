@@ -76,7 +76,13 @@ export class KafkaApp {
                 const receivedMessage: Message = JSON.parse(_value.toString());
                 if (receivedMessage.event) {
                     this.logger.info(`Received message: event: ${receivedMessage.event}, payload: ${receivedMessage.payload}`);
-                    this.eventMap[receivedMessage.event](receivedMessage);
+                    let cb = this.eventMap[receivedMessage.event];
+                    if(cb.constructor.name === "AsyncFunction") {
+                        await cb(receivedMessage);
+                    } else {
+                        cb(receivedMessage);
+                    }
+                    // this.eventMap[receivedMessage.event](receivedMessage);
                 } else {
                     this.logger.error('Received message is missing property "event".');
                 }

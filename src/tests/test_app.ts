@@ -31,6 +31,11 @@ describe("Kafka app tests", () => {
                 payload: ['Goodbye!']
             };
 
+            const TEST_MESSAGE_3: Message = {
+                event: 'goodbye_async',
+                payload: ['Goodbye!']
+            };
+
             process.on("SIGINT", shutdown);
             process.on("SIGTERM", shutdown);
             process.on("SIGBREAK", shutdown);
@@ -89,6 +94,11 @@ describe("Kafka app tests", () => {
                 chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
             })
 
+            kafkaApp.on('goodbye_async', async (message) => {
+                const name = "John Async"
+                chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
+            })
+
             await kafkaApp.run();
 
             await delay(2000);
@@ -102,6 +112,13 @@ describe("Kafka app tests", () => {
             await kafkaApp.emit({
                 topic: TEST_TOPIC,
                 messages: [{value: JSON.stringify(TEST_MESSAGE_2)}],
+                compression: kafkajs.CompressionTypes.GZIP,
+            });
+
+            await delay(2000);
+            await kafkaApp.emit({
+                topic: TEST_TOPIC,
+                messages: [{value: JSON.stringify(TEST_MESSAGE_3)}],
                 compression: kafkajs.CompressionTypes.GZIP,
             });
 
