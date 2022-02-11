@@ -17,9 +17,10 @@ async function delay(time: number) {
 describe("Kafka app tests", () => {
     it("Test", () => {
         (async () => {
-            const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
-            // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
+            // const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
+            const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
+
             const TEST_MESSAGE_1: Message = {
                 event: 'hello',
                 payload: ['Hello!']
@@ -33,6 +34,10 @@ describe("Kafka app tests", () => {
             process.on("SIGINT", shutdown);
             process.on("SIGTERM", shutdown);
             process.on("SIGBREAK", shutdown);
+
+            function eachMessageMiddleware(payload: kafkajs.EachMessagePayload) {
+                console.log(`MIDDLEWARE FUNCTION: message received: topic: ${payload.topic}: partition: ${payload.partition}`);
+            }
 
             const appConfig: KafkaAppConfig = {
                 connectorConfig: {
@@ -63,11 +68,10 @@ describe("Kafka app tests", () => {
                         },
                         sinks: [new Logger.ConsoleSink()],
                     },
-                }
+                },
+                processMessageCb: eachMessageMiddleware
             };
             const kafkaApp = await KafkaApp.create(appConfig);
-            // const listener = await kafkaConnector.getListener();
-            // const producer = await kafkaConnector.getProducer();
 
             function shutdown() {
                 kafkaApp.close().then(() => {
@@ -77,22 +81,13 @@ describe("Kafka app tests", () => {
 
             kafkaApp.on('hello', (message) => {
                 const name = "John"
-                // if(!message.payload) {
-                //     throw Error('Payload is missing.')
-                // }
-                // console.log([message.payload[0], name].join(' '))
                 chai.assert.equal([TEST_MESSAGE_1.payload, name].join(' '), [message.payload[0], name].join(' '))
             })
 
             kafkaApp.on('goodbye', (message) => {
                 const name = "John"
-                // if(!message.payload) {
-                //     throw Error('Payload is missing.')
-                // }
                 chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
             })
-
-
 
             await kafkaApp.run();
 
@@ -112,7 +107,6 @@ describe("Kafka app tests", () => {
 
             await delay(2000);
             await kafkaApp.close();
-            // await listener.close();
         })();
     });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@doctor3030/kafkajsconnector",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Kafka connector based on kafkajs.",
   "files": ["/**/*.js", "/**/*.d.ts"],
   "main": "lib/kafkajsconnector.js",

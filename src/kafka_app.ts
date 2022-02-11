@@ -28,24 +28,20 @@ export interface Message {
     metadata?: TItem
 }
 
-const EVENT_MAP: TItem = {};
-
 export class KafkaApp {
     public readonly config: KafkaAppConfig;
     private readonly _kafkaConnector: KafkaConnector;
     public kafkaListener!: KafkaListener;
     public kafkaProducer!: KafkaProducer;
-    // public event_map: TItem;
+    public eventMap: TItem;
     public readonly logger: kafka.Logger;
 
     constructor(config: KafkaAppConfig) {
-        // this.event_map = {};
         this.config = config;
         const consumerRunConfig: kafka.ConsumerRunConfig = {
             autoCommit: true,
-            eachMessage: this.processMessage
+            eachMessage: this.processMessage.bind(this)
         }
-        // this.config.connectorConfig.consumerRunConfig.eachMessage = this.processMessage;
         this._kafkaConnector = new KafkaConnector({
             clientConfig: this.config.connectorConfig.clientConfig,
             producerConfig: this.config.connectorConfig.producerConfig,
@@ -55,7 +51,7 @@ export class KafkaApp {
             loggerConfig: this.config.connectorConfig.loggerConfig
         });
         this.logger = this._kafkaConnector.logger;
-        // this.event_map = {};
+        this.eventMap = {};
     }
 
     private async init() {
@@ -68,28 +64,19 @@ export class KafkaApp {
         await newObject.init();
         return newObject;
     }
-    // private aaaa() {
-    //     return 'bbb'
-    // }
+
     private async processMessage(payload: kafka.EachMessagePayload) {
         try {
-            // If callback function exists, execute
-            // console.log(payload)
-            // if (this.config.processMessageCb) {
-            //     this.config.processMessageCb(payload);
-            // }
-            // console.log(EVENT_MAP)
+            if(this.config.processMessageCb) {
+                this.config.processMessageCb(payload);
+            }
             const _value = payload.message.value
             if (_value) {
 
                 const receivedMessage: Message = JSON.parse(_value.toString());
-                // console.log(receivedMessage)
                 if (receivedMessage.event) {
                     this.logger.info(`Received message: event: ${receivedMessage.event}, payload: ${receivedMessage.payload}`);
-                    // console.log(EVENT_MAP)
-                    // console.log(this.config)
-                    EVENT_MAP[receivedMessage.event](receivedMessage);
-                    // this.event_map[receivedMessage.event](receivedMessage);
+                    this.eventMap[receivedMessage.event](receivedMessage);
                 } else {
                     this.logger.error('Received message is missing property "event".');
                 }
@@ -112,9 +99,7 @@ export class KafkaApp {
     }
 
     public on(eventName: string, cb: (message: Message, kwargs?: TItem) => void) {
-        EVENT_MAP[eventName] = cb;
-        // this.event_map[eventName] = cb;
-        // console.log(this.event_map)
+        this.eventMap[eventName] = cb;
     }
 
     public async emit(record: kafka.ProducerRecord) {
