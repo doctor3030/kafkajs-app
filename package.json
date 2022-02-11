@@ -1,10 +1,10 @@
 {
   "name": "@doctor3030/kafkajsconnector",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Kafka connector based on kafkajs.",
   "files": ["/**/*.js", "/**/*.d.ts"],
-  "main": "lib/kafkajsconnector.js",
-  "types": "lib/kafkajsconnector.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc --declaration",
     "test": "mocha -r ts-node/register 'src/tests/test_connector.ts' && mocha -r ts-node/register 'src/tests/test_app.ts'",
