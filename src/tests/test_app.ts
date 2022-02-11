@@ -17,8 +17,8 @@ async function delay(time: number) {
 describe("Kafka app tests", () => {
     it("Test", () => {
         (async () => {
-            // const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
-            const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
+            const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
+            // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
 
             const TEST_MESSAGE_1: Message = {

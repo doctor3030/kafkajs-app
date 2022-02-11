@@ -1,4 +1,4 @@
-import * as Connector from './kafka_app'
+import * as Connector from './kafka_connector'
 import * as App from './kafka_app'
 
 declare namespace kafkajsConnector {
