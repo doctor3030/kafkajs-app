@@ -17,22 +17,25 @@ async function delay(time: number) {
 describe("Kafka app tests", () => {
     it("Test", () => {
         (async () => {
-            const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
-            // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
+            // const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
+            const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
 
             const TEST_MESSAGE_1: Message = {
                 event: 'hello',
+                request_id: 'test_req1',
                 payload: ['Hello!']
             };
 
             const TEST_MESSAGE_2: Message = {
                 event: 'goodbye',
+                request_id: 'test_req2',
                 payload: ['Goodbye!']
             };
 
             const TEST_MESSAGE_3: Message = {
                 event: 'goodbye_async',
+                request_id: 'test_req3',
                 payload: ['Goodbye!']
             };
 
@@ -86,17 +89,23 @@ describe("Kafka app tests", () => {
 
             kafkaApp.on('hello', (message) => {
                 const name = "John"
-                chai.assert.equal([TEST_MESSAGE_1.payload, name].join(' '), [message.payload[0], name].join(' '))
+                if (message.payload) {
+                    chai.assert.equal([TEST_MESSAGE_1.payload, name].join(' '), [message.payload[0], name].join(' '))
+                }
             })
 
             kafkaApp.on('goodbye', (message) => {
                 const name = "John"
+                if (message.payload) {
                 chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
+                }
             })
 
             kafkaApp.on('goodbye_async', async (message) => {
                 const name = "John Async"
+                if (message.payload) {
                 chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
+                }
             })
 
             await kafkaApp.run();
