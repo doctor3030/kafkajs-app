@@ -22,9 +22,15 @@ export interface KafkaAppConfig {
     processMessageCb?: (payload: kafka.EachMessagePayload) => void;
 }
 
+export interface Error {
+    msg: string
+}
+
 export interface Message {
     event: string;
-    payload: any[];
+    request_id: string
+    payload?: any[];
+    error?: Error
     metadata?: TItem
 }
 
@@ -76,16 +82,17 @@ export class KafkaApp {
                 const receivedMessage: Message = JSON.parse(_value.toString());
                 if (receivedMessage.event) {
                     this.logger.info(`Received message: event: ${receivedMessage.event}, payload: ${receivedMessage.payload}`);
-                    let cb = this.eventMap[receivedMessage.event];
+                    const cb = this.eventMap[receivedMessage.event];
                     if(cb.constructor.name === "AsyncFunction") {
                         await cb(receivedMessage);
                     } else {
                         cb(receivedMessage);
                     }
                     // this.eventMap[receivedMessage.event](receivedMessage);
-                } else {
-                    this.logger.error('Received message is missing property "event".');
                 }
+                // else {
+                //     this.logger.error('Received message is missing property "event".');
+                // }
             }
 
             // await this.kafkaListener.kafkaConsumer.commitOffsets([{
