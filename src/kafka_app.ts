@@ -82,7 +82,8 @@ export class KafkaApp {
                 const receivedMessage: Message = JSON.parse(_value.toString());
                 if (receivedMessage.event) {
                     this.logger.info(`Received message: event: ${receivedMessage.event}, payload: ${receivedMessage.payload}`);
-                    const cb = this.eventMap[receivedMessage.event];
+                    const key = [payload.topic, receivedMessage.event].join('.')
+                    const cb = this.eventMap[key];
                     if(cb.constructor.name === "AsyncFunction") {
                         await cb(receivedMessage);
                     } else {
@@ -111,8 +112,20 @@ export class KafkaApp {
         await this.kafkaListener.listen();
     }
 
-    public on(eventName: string, cb: (message: Message, kwargs?: TItem) => void) {
-        this.eventMap[eventName] = cb;
+    public on(
+        eventName: string,
+        cb: (message: Message, kwargs?: TItem) => void,
+        topic?: string
+    ) {
+        if (topic) {
+            const key = [topic, eventName].join('.')
+            this.eventMap[key] = cb;
+        } else {
+            this.config.connectorConfig.topics.forEach(topicConf => {
+                const key = [topicConf.topic, eventName].join('.')
+                this.eventMap[key] = cb;
+            })
+        }
     }
 
     public async emit(record: kafka.ProducerRecord) {
