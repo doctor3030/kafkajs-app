@@ -1,6 +1,6 @@
 import * as Logger from "winston-logger-kafka";
 import * as kafka from "kafkajs";
-import { KafkaConnector, KafkaListener, KafkaProducer } from "./kafka_connector"
+import {KafkaConnector, KafkaListener, KafkaProducer} from "./kafka_connector"
 
 export type TItem = {
     [key: string]: any
@@ -73,7 +73,7 @@ export class KafkaApp {
 
     private async processMessage(payload: kafka.EachMessagePayload) {
         try {
-            if(this.config.processMessageCb) {
+            if (this.config.processMessageCb) {
                 this.config.processMessageCb(payload);
             }
             const _value = payload.message.value
@@ -84,10 +84,12 @@ export class KafkaApp {
                     this.logger.info(`Received message: event: ${receivedMessage.event}, payload: ${receivedMessage.payload}`);
                     const key = [payload.topic, receivedMessage.event].join('.')
                     const cb = this.eventMap[key];
-                    if(cb.constructor.name === "AsyncFunction") {
-                        await cb(receivedMessage);
-                    } else {
-                        cb(receivedMessage);
+                    if (cb) {
+                        if (cb.constructor.name === "AsyncFunction") {
+                            await cb(receivedMessage);
+                        } else {
+                            cb(receivedMessage);
+                        }
                     }
                     // this.eventMap[receivedMessage.event](receivedMessage);
                 }
@@ -101,8 +103,7 @@ export class KafkaApp {
             //     partition: payload.partition,
             //     offset: (Number(payload.message.offset) + 1).toString()
             // }]);
-        }
-        catch (e) {
+        } catch (e) {
             console.log(e)
         }
 
