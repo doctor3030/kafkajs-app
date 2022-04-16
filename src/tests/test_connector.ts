@@ -1,11 +1,11 @@
-// import * as Logger from '../logger';
-// import { Logger as WinstonLogger } from 'winston';
 import * as kafka from "../kafka_connector";
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
+import {Levels} from "winston-logger-kafka";
 import * as chai from "chai";
 import "mocha";
-import { v4 as uuid } from "uuid";
+import {v4 as uuid} from "uuid";
+import {ConsumerEvents} from "kafkajs";
 
 const path = require("path");
 
@@ -19,19 +19,24 @@ describe("Kafka connector tests", () => {
             const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
             // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
-            const TEST_MESSAGE: Record<string, string> = { msg: "Hello!" };
+            const TEST_MESSAGE: Record<string, string> = {msg: "Hello!"};
 
             process.on("SIGINT", shutdown);
             process.on("SIGTERM", shutdown);
             process.on("SIGBREAK", shutdown);
 
+            const logger = Logger.getDefaultLogger({
+                module: path.basename(__filename),
+                component: "Test_kafka_connector",
+                level: Levels.INFO
+            })
+
             async function processMessage(payload: kafkajs.EachMessagePayload) {
                 if (payload.message.value) {
                     const receivedMessage: Record<string, string> = JSON.parse(payload.message.value.toString());
-                    console.log(`Test message: type: ${typeof TEST_MESSAGE}, message: ${TEST_MESSAGE.msg}`);
-                    console.log(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage.msg}`);
+                    logger.info(`Test message: type: ${typeof TEST_MESSAGE}, message: ${TEST_MESSAGE.msg}`);
+                    logger.info(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage.msg}`);
                     chai.assert.deepEqual(TEST_MESSAGE, receivedMessage);
-                    // console.log(TEST_MESSAGE.msg === receivedMessage.msg)
                 }
             }
 
@@ -41,32 +46,69 @@ describe("Kafka connector tests", () => {
                     clientId: `test_connector_${uuid()}`,
                     logLevel: kafkajs.logLevel.INFO,
                 },
-                consumerConfig: {
+                listenerConfig: {
                     groupId: "crawler_group",
                     sessionTimeout: 25000,
                     allowAutoTopicCreation: false,
-                },
-                consumerRunConfig: {
+                    topics: [
+                        {
+                            topic: TEST_TOPIC,
+                            fromBeginning: false,
+                        },
+                    ],
                     autoCommit: true,
                     eachMessage: processMessage,
+                    consumerCallbacks: {
+                        "consumer.connect": (listener: kafkajs.ConnectEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            payload: ${listener.payload}`);
+                        },
+                        "consumer.disconnect": (listener: kafkajs.DisconnectEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            payload: ${listener.payload}`);
+                        },
+                        "consumer.fetch": (listener: kafkajs.ConsumerFetchEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            numberOfBatches: ${listener.payload.numberOfBatches},
+                            duration: ${listener.payload.duration}`);
+                        },
+                        "consumer.network.request": (listener: kafkajs.RequestEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            apiKey: ${listener.payload.apiKey},
+                            apiVersion: ${listener.payload.apiVersion},
+                            broker: ${listener.payload.broker},
+                            clientId: ${listener.payload.clientId},
+                            correlationId: ${listener.payload.correlationId},
+                            createdAt: ${listener.payload.createdAt},
+                            duration: ${listener.payload.duration},
+                            pendingDuration: ${listener.payload.pendingDuration},
+                            sentAt: ${listener.payload.sentAt},
+                            size: ${listener.payload.size}`);
+                        },
+                    }
                 },
-                topics: [
-                    {
-                        topic: TEST_TOPIC,
-                        fromBeginning: false,
-                    },
-                ],
+                // consumerRunConfig: {
+                //     autoCommit: true,
+                //     eachMessage: processMessage,
+                // },
+                // topics: [
+                //     {
+                //         topic: TEST_TOPIC,
+                //         fromBeginning: false,
+                //     },
+                // ],
                 producerConfig: {
                     allowAutoTopicCreation: false,
                 },
-                loggerConfig: {
-                    loggerConfig: {
-                        module: path.basename(__filename),
-                        component: "Test",
-                        serviceID: uuid(),
-                    },
-                    sinks: [new Logger.ConsoleSink()],
-                },
+                logger: logger
             };
             const kafkaConnector = new kafka.KafkaConnector(configKafka);
             const listener = await kafkaConnector.getListener();
@@ -84,7 +126,7 @@ describe("Kafka connector tests", () => {
             await delay(2000);
             await producer.send({
                 topic: TEST_TOPIC,
-                messages: [{ value: JSON.stringify(TEST_MESSAGE) }],
+                messages: [{value: JSON.stringify(TEST_MESSAGE)}],
                 compression: kafkajs.CompressionTypes.GZIP,
             });
 
