@@ -10,29 +10,22 @@ npm install kafkajs-app
 
 ## Usage
 
-#### Configure and create application instance.
-
-[test](#test)
+### Configure and create application instance.
 
 Configuration parameters:
 
 - **app_name [OPTIONAL]**: application name.
 - **clientConfig**: kafka client config (see [kafkajs client configuration](https://kafka.js.org/docs/configuration)).
-- **producerConfig [OPTIONAL]**: kafka producer configuration (
-  see [kafkajs producer configuration](https://kafka.js.org/docs/producing)).
+- **producerConfig [OPTIONAL]**: kafka producer configuration
+  (see [kafka connector](#connector) for details).
+- **listenerConfig [OPTIONAL]**: kafka listener configuration
+  (see [kafka connector](#connector) for details).
 
 > **_NOTE_** The **ListenerConfig** interface
-> extends ConsumerConfig interface from kafkajs.
+> extends ListenerConfig interface of [KafkaConnector](#connector).
 >
-
-- **listenerConfig [OPTIONAL]**: kafka listener configuration.
-
-> **_NOTE_** The **AppListenerConfig** interface
-> extends ConsumerConfig interface from kafkajs.
->
-> Extended options include all **commit strategy options**
-> from kafkajs **ConsumerRunConfig** type and  
-> two additional options called **keyDeserializer** and **valueDeserializer**.
+> Extended options include two additional options called
+> **keyDeserializer** and **valueDeserializer**.
 >
 > The **keyDeserializer** is a function that takes kafka message key (bytes)
 > as an argument and returns a string. Default key deserializer
@@ -50,7 +43,6 @@ Configuration parameters:
 > value_deserialized = JSON.parse(value.toString());
 > ```
 
-- **topics**: list of topics to subscribe to.
 - **messageKeyAsEvent [OPTIONAL]**: set to True if using kafka message key as event name.
 
 > **_NOTE_** When setting ***messageKeyAsEvent*** to true,
@@ -62,8 +54,8 @@ Configuration parameters:
 > If kafka message value does not contain **event** property,
 > the message will be ignored.
 
-- **middlewareMessageCb [OPTIONAL]**: if provided, this callback will be executed with raw kafka message as an argument
-  before calling any handler.
+- **middlewareBatchCb [OPTIONAL]**: if provided, this callback will be executed with
+  raw [EachBatchPayload](https://kafka.js.org/docs/consuming#eachbatch) as an argument before calling any handler.
 
 - **logger [OPTIONAL]**: any logger with standard log methods. If not provided,
   the [winston-logger-kafka](https://www.npmjs.com/package/winston-logger-kafka) is used with console transport and
@@ -101,6 +93,12 @@ const logger = Logger.getDefaultLogger({
     level: Levels.DEBUG
 });
 
+const kafkaLogger = Logger.getChildLogger(logger, {
+    module: path.basename(__filename),
+    component: "Test_kafka_application-Kafka_client",
+    level: Levels.DEBUG
+})
+
 // Create application config
 const appConfig: KafkaAppConfig = {
     appName: 'My Application',
@@ -109,28 +107,44 @@ const appConfig: KafkaAppConfig = {
         logLevel: kafkajs.logLevel.DEBUG,
     },
     consumerConfig: {
-        groupId: "crawler_group",
+        groupId: "kafkajs-app_test_group",
         sessionTimeout: 25000,
         allowAutoTopicCreation: false,
+        topics: [
+            {
+                topic: TEST_TOPIC,
+                fromBeginning: false,
+            },
+        ],
     },
-    topics: [
-        {
-            topic: TEST_TOPIC,
-            fromBeginning: false,
-        },
-    ],
+
     producerConfig: {
         allowAutoTopicCreation: false,
     },
     logger: logger,
-    middlewareMessageCb: eachMessageMiddleware
+    kafkaLogger: kafkaLogger,
 };
 
 // Create application
 const app = await KafkaApp.create(appConfig);
 ```
 
-#### Create event handlers using **app.on()** method:
+### Create event handlers using **app.on()** method:
+
+app.on() method takes three arguments:
+
+- **eventName**: event name
+- **cb**: a callback function that that will be handeling event
+- **topic [OPTIONAL]**: topic name to handle events from
+
+If **topic** argument is provided to **app.on()** method, the callback is mapped to particular topic.event key that
+means an event that comes from a topic other than the specified will not be processed. Otherwise, event will be
+processed no matter which topic it comes from.
+
+The callback function take two arguments:
+
+- message: deserialized value of the kafka message (your payload object)
+- metadata: kafka message metadata object (see **KafkaMessageMetadata** interface)
 
 ```typescript
 // This handler will handle 'some_event' no matter which topic it comes from
@@ -168,87 +182,170 @@ app.on(
 );
 ```
 
-> **_NOTE:_** If **topic** argument is provided to **app.on()** method,
-> the callback is mapped to particular topic.event key that means
-> an event that comes from a topic other than the specified
-> will not be processed. Otherwise, event will be processed
-> no matter which topic it comes from.
+### Use **app.emit()** method to send messages to kafka:
 
-Use **app.emit()** method to send messages to kafka:
+The app.emit() method just wraps up send() method of the kafkajs Producer. It takes kafkajs ProducerRecord as an
+argument and returns kafkajs RecordMetadata.
 
 ```typescript
-import {ProducerRecord, CompressionTypes} from "kafkajs";
+import {ProducerRecord, RecordMetadata, CompressionTypes} from "kafkajs";
 
 
 // Define a payload you want to send:
-msgValue = {
+const msgValue = {
     event: 'some_event',
     prop1: 'prop1 value',
     prop2: 34
 };
 
 // Define kafka message:
-msg: ProducerRecord = {
+const msg: ProducerRecord = {
     key: 'some key',
     value: msgValue
 };
 
 // Send message
-app.emit({
+await app.emit({
     topic: 'test_topic1',
     messages: [msg],
     compression: CompressionTypes.GZIP
+}).then((metaData) => {
+    console.log(metaData);
 });
 ```
 
-#### Start application:
+### Start application:
 
 ```typescript
 await app.run();
 ```
 
-## <a name="test"></a> Use standalone kafka connector
+## <a name="connector"></a> Standalone kafka connector
 
 The **KafkaConnector** class can be used to simplify producer and consumer initialization.
 
 When  **KafkaConnector** is initialized, you can use its methods to get producer and listener:
 
 - **getProducer()** method returns an instance of the **KafkaProducer** class that wraps up initialization and
-  connection of the [kafkajs producer](https://kafka.js.org/docs/producing).
+  connection of the
+  [kafkajs producer](https://kafka.js.org/docs/producing).
 - **getListener()** method returns an instance of the **KafkaListener** class that wraps
   up [kafkajs consumer](https://kafka.js.org/docs/consuming), its initialization, connection and subscription to topics.
   When listener created, use **
   listen()** method to start consume messages.
 
-Use **ListenerConfig** class to create listener configuration:
+### Configuration
 
-```python
-from kafka_python_app.connector import ListenerConfig
+Kafka connector configuration has four parameters:
 
-kafka_listener_config = ListenerConfig(
-    bootstrap_servers=['ip1:port1', 'ip2:port2', ...],
-    process_message_cb=my_process_message_func,
-    consumer_config={'group_id': 'test_group'},
-    topics=['topic1', 'topic2', ...],
-    logger=my_logger
-)
+- **clientConfig**: kafkajs client configuration (
+  see [kafkajs client configuration](https://kafka.js.org/docs/configuration)).
+- **producerConfig [OPTIONAL]**: contains all standard kafkajs producer configuration options plus additional
+  parameter **producerCallbacks**
+  that can be used to pass custom callbacks for producer events.
+- **listenerConfig [OPTIONAL]**: this configuration brings together all parameter of kafkajs consumer including
+  ConsumerConfig, ConsumerRunConfig and topics. It also brings in **consumerCallbacks** parameter where you can specify
+  callbacks for consumer events.
+- **logger [OPTIONAL]**: this can be any logger having a standard log methods.
+
+### KafkaProducer & KafkaListener classes
+
+These classes play a role of a wrappers of kafkajs producer and consumer taking care of their initialization and
+connection. When intantiated, producer expose methods **send()** and **close()**
+and listener expose methods **listen()** and **close()**. The kafkajs producer and consumer can still be accessed
+directly using **.producer** and **.consumer**
+properties of the KafkaProducer and KafkaListener correspondingly.
+
+### Usage
+
+Import libraries:
+
+```typescript
+import * as kafkaConnector from "kafkajs-app";
+import * as kafkajs from "kafkajs";
 ```
 
-- **bootstrap_servers**: list of kafka bootstrap servers addresses 'host:port'.
-- **process_message_cb**: a function that will be called on each message.
+Define callback function for process messages:
 
-```python
-from kafka.consumer.fetcher import ConsumerRecord
-
-
-def my_process_message_func(message: ConsumerRecord):
-    print('Received kafka message: key: {}, value: {}'.format(
-        message.key,
-        message.value
-    ))
+```typescript
+async function processMessage(payload: kafkajs.EachMessagePayload) {
+    if (payload.message.value) {
+        const receivedMessage: Record<string, string> = JSON.parse(payload.message.value.toString());
+        logger.info(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage.msg}`);
+    }
+}
 ```
 
-- **consumer_config [OPTIONAL]**: kafka consumer configuration (
-  see [kafka-python documentation](https://kafka-python.readthedocs.io/en/master/apidoc/KafkaConsumer.html)).
-- **topics**: list of topics to listen from.
-- **logger [OPTIONAL]**: any logger with standard log methods. If not provided, the standard python logger is used.
+Create connector configuration:
+
+```typescript
+const configKafka: kafka.KafkaConnectorConfig = {
+    clientConfig: {
+        brokers: ['localhost:9092'],
+        clientId: 'test_connector_1',
+        logLevel: kafkajs.logLevel.INFO,
+    },
+    listenerConfig: {
+        groupId: "test_kafka_connectorjs_group",
+        sessionTimeout: 25000,
+        allowAutoTopicCreation: false,
+        topics: [
+            {
+                topic: 'test_topic',
+                fromBeginning: false,
+            },
+        ],
+        autoCommit: true,
+        eachMessage: processMessage,
+        consumerCallbacks: {
+            "consumer.connect": (listener: kafkajs.ConnectEvent) => {
+                logger.info(`Consumer connected at ${listener.timestamp}`);
+            },
+            "consumer.disconnect": (listener: kafkajs.DisconnectEvent) => {
+                logger.info(`Consumer disconnected at ${listener.timestamp}`);
+            },
+        }
+    },
+    producerConfig: {
+        allowAutoTopicCreation: false,
+        producerCallbacks: {
+            "producer.connect": () => (listener: kafkajs.ConnectEvent) => {
+                logger.info(`Producer connected at ${listener.timestamp}`);
+            },
+            "producer.disconnect": (listener: kafkajs.DisconnectEvent) => {
+                logger.info(`Producer connected at ${listener.timestamp}`);
+            }
+        }
+    }
+};
+```
+
+Create connector instance, listener and producer:
+
+```typescript
+const kafkaConnector = new kafka.KafkaConnector(configKafka);
+const listener = await kafkaConnector.getListener();
+const producer = await kafkaConnector.getProducer();
+```
+
+Start consuming messages:
+
+```typescript
+await listener.listen();
+```
+
+Send messages:
+
+```typescript
+const test_message: Record<string, string> = {msg: "Hello!"};
+await producer.send({
+    topic: 'test_topic',
+    messages: [{value: JSON.stringify(test_message)}],
+    compression: kafkajs.CompressionTypes.GZIP,
+});
+```
+
+## LICENSE
+MIT
+
+##### AUTHOR: [Dmitry Amanov](https://github.com/doctor3030)

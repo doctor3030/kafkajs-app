@@ -1,10 +1,10 @@
-import {KafkaAppConfig, KafkaApp} from "../kafka_app"
+import {KafkaApp, KafkaAppConfig} from "../kafka_app"
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
+import {Levels} from "winston-logger-kafka";
 import * as chai from "chai";
 import "mocha";
 import {v4 as uuid} from "uuid";
-import {Levels} from "winston-logger-kafka";
 
 const path = require("path");
 
@@ -54,6 +54,11 @@ describe("Kafka app tests", () => {
                 component: "Test_kafka_application",
                 level: Levels.INFO
             })
+            const kafkaLogger = Logger.getChildLogger(logger, {
+                module: path.basename(__filename),
+                component: "Test_kafka_application-Kafka_client",
+                level: Levels.INFO
+            })
 
             function eachBatchMiddleware(payload: kafkajs.EachBatchPayload) {
                 logger.info(`MIDDLEWARE FUNCTION: batch received: 
@@ -75,7 +80,7 @@ describe("Kafka app tests", () => {
                             fromBeginning: false,
                         },
                     ],
-                    groupId: "crawler_group",
+                    groupId: "kafkajs-app_test_group",
                     sessionTimeout: 25000,
                     allowAutoTopicCreation: false,
                     autoCommit: false,
@@ -99,16 +104,25 @@ describe("Kafka app tests", () => {
                         },
                     }
                 },
-                // topics: [
-                //     {
-                //         topic: TEST_TOPIC,
-                //         fromBeginning: false,
-                //     },
-                // ],
                 producerConfig: {
                     allowAutoTopicCreation: false,
+                    producerCallbacks: {
+                        "producer.connect": () => (listener: kafkajs.ConnectEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            payload: ${listener.payload}`);
+                        },
+                        "producer.disconnect": (listener: kafkajs.DisconnectEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            payload: ${listener.payload}`);
+                        }
+                    }
                 },
                 logger: logger,
+                kafkaLogger: kafkaLogger,
                 middlewareBatchCb: eachBatchMiddleware
             };
             const kafkaApp = await KafkaApp.create(appConfig);

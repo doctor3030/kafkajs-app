@@ -1,11 +1,9 @@
 import * as kafka from "../kafka_connector";
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
-import {Levels} from "winston-logger-kafka";
 import * as chai from "chai";
 import "mocha";
 import {v4 as uuid} from "uuid";
-import {ConsumerEvents} from "kafkajs";
 
 const path = require("path");
 
@@ -28,7 +26,7 @@ describe("Kafka connector tests", () => {
             const logger = Logger.getDefaultLogger({
                 module: path.basename(__filename),
                 component: "Test_kafka_connector",
-                level: Levels.INFO
+                level: Logger.Levels.INFO
             })
 
             async function processMessage(payload: kafkajs.EachMessagePayload) {
@@ -47,7 +45,7 @@ describe("Kafka connector tests", () => {
                     logLevel: kafkajs.logLevel.INFO,
                 },
                 listenerConfig: {
-                    groupId: "crawler_group",
+                    groupId: "test_kafka_connectorjs_group",
                     sessionTimeout: 25000,
                     allowAutoTopicCreation: false,
                     topics: [
@@ -95,18 +93,22 @@ describe("Kafka connector tests", () => {
                         },
                     }
                 },
-                // consumerRunConfig: {
-                //     autoCommit: true,
-                //     eachMessage: processMessage,
-                // },
-                // topics: [
-                //     {
-                //         topic: TEST_TOPIC,
-                //         fromBeginning: false,
-                //     },
-                // ],
                 producerConfig: {
                     allowAutoTopicCreation: false,
+                    producerCallbacks: {
+                        "producer.connect": () => (listener: kafkajs.ConnectEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            payload: ${listener.payload}`);
+                        },
+                        "producer.disconnect": (listener: kafkajs.DisconnectEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            payload: ${listener.payload}`);
+                        }
+                    }
                 },
                 logger: logger
             };

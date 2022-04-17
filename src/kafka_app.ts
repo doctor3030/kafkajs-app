@@ -1,24 +1,11 @@
 import * as Logger from "winston-logger-kafka";
 import * as kafka from "kafkajs";
-import {KafkaConnector, KafkaListener, ListenerConfig, KafkaProducer, ProducerConfig, ILogger, } from "./kafka_connector"
-
-export type TItem = {
-    [key: string]: any
-}
+import {KafkaConnector, KafkaListener, ListenerConfig as ConnectorListenerConfig,
+    KafkaProducer, ProducerConfig, ILogger, } from "./kafka_connector"
 
 const path = require("path");
 
-// export interface ConsumerConfig extends kafka.ConsumerConfig {
-//     autoCommit?: boolean
-//     autoCommitInterval?: number | null
-//     autoCommitThreshold?: number | null
-//     eachBatchAutoResolve?: boolean
-//     partitionsConsumedConcurrently?: number
-//     keyDeserializer?: (key: Buffer) => string
-//     valueDeserializer?: (key: Buffer) => any
-// }
-
-export interface AppListenerConfig extends ListenerConfig {
+export interface ListenerConfig extends ConnectorListenerConfig {
     keyDeserializer?: (key: Buffer) => string
     valueDeserializer?: (key: Buffer) => any
 }
@@ -27,7 +14,7 @@ export interface KafkaAppConfig {
     appName?: string
     clientConfig: kafka.KafkaConfig
     producerConfig?: ProducerConfig
-    listenerConfig: AppListenerConfig
+    listenerConfig: ListenerConfig
     // topics: kafka.ConsumerSubscribeTopic[]
     messageKeyAsEvent?: boolean
     middlewareBatchCb?: (payload: kafka.EachBatchPayload) => void
@@ -39,7 +26,7 @@ export interface KafkaAppConfig {
 export interface KafkaMessageMetadata {
     topic: string
     partition: number
-    highWatermark?: string
+    highWatermark: string
     timestamp: string
     size: number
     attributes: number
@@ -52,7 +39,7 @@ export class KafkaApp {
     private readonly _kafkaConnector: KafkaConnector;
     public kafkaListener!: KafkaListener;
     public kafkaProducer!: KafkaProducer;
-    public eventMap: TItem;
+    public eventMap: Record<string, any>;
     public readonly logger: ILogger;
 
     constructor(config: KafkaAppConfig) {
@@ -60,32 +47,16 @@ export class KafkaApp {
         if (!this.config.appName) {
             this.config.appName = 'Kafka application JS'
         }
-        // const consumerRunConfig: kafka.ConsumerRunConfig = {
-        //     autoCommit: this.config.consumerConfig?.autoCommit,
-        //     autoCommitInterval: this.config.consumerConfig?.autoCommitInterval,
-        //     autoCommitThreshold: this.config.consumerConfig?.autoCommitThreshold,
-        //     eachBatchAutoResolve: this.config.consumerConfig?.eachBatchAutoResolve,
-        //     partitionsConsumedConcurrently: this.config.consumerConfig?.partitionsConsumedConcurrently,
-        //     eachBatch: this.processBatch.bind(this)
-        // }
+
         this.config.listenerConfig.eachBatch = this.processBatch.bind(this)
         if (this.config.logger) {
             this.logger = this.config.logger;
         } else {
-            // let component = 'Kafka application JS';
-            // if (this.config.appName) {
-            //     component = this.config.appName;
-            // }
-
             this.logger = Logger.getDefaultLogger({
                 module: path.basename(__filename),
                 component: this.config.appName,
                 level: Logger.Levels.DEBUG
             })
-        }
-
-        if (this.config.kafkaLogger) {
-
         }
 
         this._kafkaConnector = new KafkaConnector({
@@ -120,21 +91,21 @@ export class KafkaApp {
         return app;
     }
 
-    private getEventCallback(topic: string, message_value: any, message_key: string | null) {
-        if (message_value) {
+    private getEventCallback(topic: string, messageValue: any, messageKey: string | null) {
+        if (messageValue) {
             let cbKey: string;
-            let cb: (message: any, kwargs?: TItem) => void;
+            let cb: (message: any, kwargs?: Record<string, any>) => void;
 
             if (this.config.messageKeyAsEvent) {
-                if (!message_key) {
+                if (!messageKey) {
                     return null
                 }
 
-                cbKey = [topic, message_key].join('.');
+                cbKey = [topic, messageKey].join('.');
                 cb = this.eventMap[cbKey]
 
             } else {
-                const event = message_value['event'];
+                const event = messageValue['event'];
                 if (!event) {
                     throw Error('"event" property is missing in message.value object. ' +
                         'Provide "event" property or set "message_key_as_event" option to True ' +
@@ -145,7 +116,7 @@ export class KafkaApp {
                 cb = this.eventMap[cbKey]
             }
 
-            return {message_key, cb}
+            return {messageKey, cb}
         } else {
             return null
         }
@@ -156,7 +127,7 @@ export class KafkaApp {
             this.config.middlewareBatchCb(payload);
         }
 
-        for (let message of payload.batch.messages) {
+        for (const message of payload.batch.messages) {
             const messageValue = (val => {
                 if (val) {
                     if (this.config.listenerConfig?.valueDeserializer) {
@@ -204,75 +175,12 @@ export class KafkaApp {
 
             const listenerConfig = this.config.listenerConfig
             if (!listenerConfig?.autoCommit && !listenerConfig?.eachBatchAutoResolve) {
-                // if (consumerConf?.autoCommitInterval || consumerConf?.autoCommitThreshold) {
-                //     console.log('commitOffsetsIfNecessary()')
-                //     await payload.commitOffsetsIfNecessary();
-                //     await payload.heartbeat();
-                // } else {
-                //     console.log('resolveOffset()')
-                //     payload.resolveOffset(message.offset);
-                //     await payload.commitOffsetsIfNecessary();
-                //     await payload.heartbeat();
-                // }
-
                 payload.resolveOffset(message.offset);
                 await payload.commitOffsetsIfNecessary();
                 await payload.heartbeat();
             }
         }
     }
-
-    // private async processMessage(payload: kafka.EachMessagePayload) {
-    //     if (this.config.middlewareMessageCb) {
-    //         this.config.middlewareMessageCb(payload);
-    //     }
-    //
-    //     const message = payload.message;
-    //
-    //     const messageValue = (val => {
-    //         if (val) {
-    //             if (this.config.consumerConfig && this.config.consumerConfig.valueDeserializer) {
-    //                 return this.config.consumerConfig.valueDeserializer(val)
-    //             } else {
-    //                 return JSON.parse(val.toString())
-    //             }
-    //         } else {
-    //             return null
-    //         }
-    //     })(message.value);
-    //
-    //     const messageKey = (val => {
-    //         if (val) {
-    //             if (this.config.consumerConfig && this.config.consumerConfig.keyDeserializer) {
-    //                 return this.config.consumerConfig.keyDeserializer(val)
-    //             } else {
-    //                 return val.toString()
-    //             }
-    //         } else {
-    //             return null
-    //         }
-    //     })(message.key);
-    //
-    //     const eventCallback = this.getEventCallback(payload.topic, messageValue, messageKey)
-    //
-    //     const messageMetadata: KafkaMessageMetadata = {
-    //         topic: payload.topic,
-    //         partition: payload.partition,
-    //         timestamp: message.timestamp,
-    //         size: message.size,
-    //         attributes: message.attributes,
-    //         offset: message.offset,
-    //         headers: message.headers
-    //     }
-    //
-    //     if (eventCallback) {
-    //         if (eventCallback.cb.constructor.name === "AsyncFunction") {
-    //             await eventCallback.cb(messageValue, messageMetadata);
-    //         } else {
-    //             eventCallback.cb(messageValue, messageMetadata);
-    //         }
-    //     }
-    // }
 
     public async run() {
         await this.kafkaListener.listen();
@@ -295,7 +203,7 @@ export class KafkaApp {
     }
 
     public async emit(record: kafka.ProducerRecord) {
-        await this.kafkaProducer.send(record);
+        return await this.kafkaProducer.send(record);
     }
 
     public async close() {
