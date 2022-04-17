@@ -21,14 +21,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/doctor3030/kafkajsConnector.git"
+    "url": "git+https://github.com/doctor3030/kafkajs-app.git"
   },
   "author": "Dmitry Amanov",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/doctor3030/kafkajsConnector/issues"
+    "url": "https://github.com/doctor3030/kafkajs-app/issues"
   },
-  "homepage": "https://github.com/doctor3030/kafkajsConnector#readme",
+  "homepage": "https://github.com/doctor3030/kafkajs-app#readme",
   "devDependencies": {
     "@types/chai": "^4.3.0",
     "@types/mocha": "^9.0.0",

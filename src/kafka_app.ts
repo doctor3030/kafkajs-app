@@ -15,7 +15,6 @@ export interface KafkaAppConfig {
     clientConfig: kafka.KafkaConfig
     producerConfig?: ProducerConfig
     listenerConfig: ListenerConfig
-    // topics: kafka.ConsumerSubscribeTopic[]
     messageKeyAsEvent?: boolean
     middlewareBatchCb?: (payload: kafka.EachBatchPayload) => void
     logger?: ILogger
