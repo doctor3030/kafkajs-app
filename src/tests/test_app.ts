@@ -23,7 +23,7 @@ async function delay(time: number) {
 describe("Kafka app tests", () => {
     it("Test", () => {
         (async () => {
-            const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
+            const KAFKA_BOOTSTRAP_SERVERS = '127.0.0.1:9092';
             // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
 
@@ -84,7 +84,7 @@ describe("Kafka app tests", () => {
                     sessionTimeout: 25000,
                     allowAutoTopicCreation: false,
                     autoCommit: false,
-                    eachBatchAutoResolve: true,
+                    eachBatchAutoResolve: false,
                     partitionsConsumedConcurrently: 4,
                     consumerCallbacks: {
                         "consumer.network.request": (listener: kafkajs.RequestEvent) => {
