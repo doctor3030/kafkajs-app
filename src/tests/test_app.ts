@@ -70,7 +70,8 @@ describe("Kafka app tests", () => {
             const appConfig: KafkaAppConfig = {
                 clientConfig: {
                     brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
-                    clientId: `test_connector_${uuid()}`,
+                    // clientId: `test_connector_${uuid()}`,
+                    clientId: 'test_connector',
                     logLevel: kafkajs.logLevel.INFO,
                 },
                 listenerConfig: {
@@ -80,7 +81,7 @@ describe("Kafka app tests", () => {
                             fromBeginning: false,
                         },
                     ],
-                    groupId: "kafkajs-app_test_group",
+                    groupId: "test_kafka_connectorjs_group",
                     sessionTimeout: 25000,
                     allowAutoTopicCreation: false,
                     autoCommit: false,

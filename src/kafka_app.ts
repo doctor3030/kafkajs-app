@@ -182,7 +182,7 @@ export class KafkaApp {
                         topic: payload.batch.topic,
                         partitions: [{
                             partition: payload.batch.partition,
-                            offset: message.offset
+                            offset: (Number(message.offset) + 1).toString()
                         }]
                     }]
                 };

@@ -27,9 +27,11 @@ describe("Kafka app tests", () => {
             // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
 
+            const N_MESSAGES = 2000
+
             const MESSAGES = (() => {
                 const msgs: Message[] = [];
-                for (let i = 1; i < 200; i++) {
+                for (let i = 1; i < N_MESSAGES + 1; i++) {
                     msgs.push({
                         event: 'test_event',
                         request_id: uuid(),
@@ -66,7 +68,8 @@ describe("Kafka app tests", () => {
             const appConfig: KafkaAppConfig = {
                 clientConfig: {
                     brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
-                    clientId: `test_connector_${uuid()}`,
+                    // clientId: `test_connector_${uuid()}`,
+                    clientId: 'test_connector',
                     logLevel: kafkajs.logLevel.INFO,
                 },
                 listenerConfig: {
@@ -76,7 +79,7 @@ describe("Kafka app tests", () => {
                             fromBeginning: false,
                         },
                     ],
-                    groupId: "kafkajs-app_test_group",
+                    groupId: "test_kafka_connectorjs_group",
                     sessionTimeout: 25000,
                     allowAutoTopicCreation: false,
                     autoCommit: false,
@@ -127,7 +130,7 @@ describe("Kafka app tests", () => {
 
             function shutdown() {
                 kafkaApp.close().then(() => {
-                    // console.log("Closed.");
+                    // console.log("Closing...");
                 });
             }
 
@@ -139,11 +142,16 @@ describe("Kafka app tests", () => {
 
                 handledTotal++;
                 logger.info(`Total handeled: ${handledTotal}`)
+
+                if (handledTotal === N_MESSAGES) {
+                    logger.info('Consumed all messages.')
+                    shutdown();
+                }
             }
 
             kafkaApp.on('test_event', async (message) => {
                 logMessage(message);
-                await delay(500);
+                await delay(10);
             })
 
             await kafkaApp.run();
@@ -155,12 +163,14 @@ describe("Kafka app tests", () => {
                     messages: [{value: JSON.stringify(msg)}],
                     compression: kafkajs.CompressionTypes.GZIP,
                 });
+
+                await delay(10);
             }
 
 
 
-            await delay(120000);
-            await kafkaApp.close();
+            await delay(2000);
+            // await kafkaApp.close();
         })();
     });
 });

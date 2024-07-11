@@ -33,7 +33,7 @@ describe("Kafka connector tests", () => {
                 if (payload.message.value) {
                     const receivedMessage: Record<string, string> = JSON.parse(payload.message.value.toString());
                     logger.info(`Test message: type: ${typeof TEST_MESSAGE}, message: ${TEST_MESSAGE.msg}`);
-                    logger.info(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage.msg}`);
+                    logger.info(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage['msg']}`);
                     chai.assert.deepEqual(TEST_MESSAGE, receivedMessage);
                 }
             }
@@ -41,7 +41,8 @@ describe("Kafka connector tests", () => {
             const configKafka: kafka.KafkaConnectorConfig = {
                 clientConfig: {
                     brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
-                    clientId: `test_connector_${uuid()}`,
+                    // clientId: `test_connector_${uuid()}`,
+                    clientId: 'test_connector',
                     logLevel: kafkajs.logLevel.INFO,
                 },
                 listenerConfig: {
