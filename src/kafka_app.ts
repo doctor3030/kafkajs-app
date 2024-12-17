@@ -2,6 +2,7 @@ import * as Logger from "winston-logger-kafka";
 import * as kafka from "kafkajs";
 import {KafkaConnector, KafkaListener, ListenerConfig as ConnectorListenerConfig,
     KafkaProducer, ProducerConfig, ILogger, } from "./kafka_connector"
+import {Offsets} from "kafkajs";
 
 const path = require("path");
 
@@ -175,7 +176,17 @@ export class KafkaApp {
             const listenerConfig = this.config.listenerConfig
             if (!listenerConfig?.autoCommit && !listenerConfig?.eachBatchAutoResolve) {
                 payload.resolveOffset(message.offset);
-                await payload.commitOffsetsIfNecessary();
+
+                const offsets: Offsets = {
+                    topics: [{
+                        topic: payload.batch.topic,
+                        partitions: [{
+                            partition: payload.batch.partition,
+                            offset: (Number(message.offset) + 1).toString()
+                        }]
+                    }]
+                };
+                await payload.commitOffsetsIfNecessary(offsets);
                 await payload.heartbeat();
             }
         }

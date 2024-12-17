@@ -27,23 +27,21 @@ describe("Kafka app tests", () => {
             // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
 
-            const TEST_MESSAGE_1: Message = {
-                event: 'hello',
-                request_id: 'test_req1',
-                payload: ['Hello!']
-            };
+            const N_MESSAGES = 2000
 
-            const TEST_MESSAGE_2: Message = {
-                event: 'goodbye',
-                request_id: 'test_req2',
-                payload: ['Goodbye!']
-            };
+            const MESSAGES = (() => {
+                const msgs: Message[] = [];
+                for (let i = 1; i < N_MESSAGES + 1; i++) {
+                    msgs.push({
+                        event: 'test_event',
+                        request_id: uuid(),
+                        payload: [`Test message #${i}`]
+                    })
+                }
+                return msgs
+            })()
 
-            const TEST_MESSAGE_3: Message = {
-                event: 'goodbye_async',
-                request_id: 'test_req3',
-                payload: ['Goodbye!']
-            };
+            let handledTotal = 0;
 
             process.on("SIGINT", shutdown);
             process.on("SIGTERM", shutdown);
@@ -88,21 +86,6 @@ describe("Kafka app tests", () => {
                     eachBatchAutoResolve: false,
                     partitionsConsumedConcurrently: 4,
                     consumerCallbacks: {
-                        "consumer.network.request": (listener: kafkajs.RequestEvent) => {
-                            logger.info(`Custom callback "${listener.type}".
-                            id: ${listener.id},
-                            timestamp: ${listener.timestamp},
-                            apiKey: ${listener.payload.apiKey},
-                            apiVersion: ${listener.payload.apiVersion},
-                            broker: ${listener.payload.broker},
-                            clientId: ${listener.payload.clientId},
-                            correlationId: ${listener.payload.correlationId},
-                            createdAt: ${listener.payload.createdAt},
-                            duration: ${listener.payload.duration},
-                            pendingDuration: ${listener.payload.pendingDuration},
-                            sentAt: ${listener.payload.sentAt},
-                            size: ${listener.payload.size}`);
-                        },
                         "consumer.commit_offsets": (listener: kafkajs.ConsumerCommitOffsetsEvent) => {
                             logger.info(`Custom callback "${listener.type}".
                             id: ${listener.id},
@@ -147,7 +130,7 @@ describe("Kafka app tests", () => {
 
             function shutdown() {
                 kafkaApp.close().then(() => {
-                    // console.log("Closed.");
+                    // console.log("Closing...");
                 });
             }
 
@@ -156,60 +139,38 @@ describe("Kafka app tests", () => {
                 event: ${message.event}, 
                 request_id: ${message.request_id},
                 payload: ${message.payload}`);
+
+                handledTotal++;
+                logger.info(`Total handeled: ${handledTotal}`)
+
+                if (handledTotal === N_MESSAGES) {
+                    logger.info('Consumed all messages.')
+                    shutdown();
+                }
             }
 
-            kafkaApp.on('hello', (message) => {
+            kafkaApp.on('test_event', async (message) => {
                 logMessage(message);
-
-                const name = "John"
-                if (message.payload) {
-                    chai.assert.equal([TEST_MESSAGE_1.payload, name].join(' '), [message.payload[0], name].join(' '))
-                }
-            })
-
-            kafkaApp.on('goodbye', (message) => {
-                logMessage(message);
-
-                const name = "John"
-                if (message.payload) {
-                    chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
-                }
-            })
-
-            kafkaApp.on('goodbye_async', async (message) => {
-                logMessage(message);
-
-                const name = "John Async"
-                if (message.payload) {
-                    chai.assert.equal([TEST_MESSAGE_2.payload, name].join(' '), [message.payload[0], name].join(' '))
-                }
+                await delay(10);
             })
 
             await kafkaApp.run();
 
             await delay(2000);
-            await kafkaApp.emit({
-                topic: TEST_TOPIC,
-                messages: [{value: JSON.stringify(TEST_MESSAGE_1)}],
-                compression: kafkajs.CompressionTypes.GZIP,
-            });
+            for (const msg of MESSAGES) {
+                await kafkaApp.emit({
+                    topic: TEST_TOPIC,
+                    messages: [{value: JSON.stringify(msg)}],
+                    compression: kafkajs.CompressionTypes.GZIP,
+                });
+
+                await delay(10);
+            }
+
+
 
             await delay(2000);
-            await kafkaApp.emit({
-                topic: TEST_TOPIC,
-                messages: [{value: JSON.stringify(TEST_MESSAGE_2)}],
-                compression: kafkajs.CompressionTypes.GZIP,
-            });
-
-            await delay(2000);
-            await kafkaApp.emit({
-                topic: TEST_TOPIC,
-                messages: [{value: JSON.stringify(TEST_MESSAGE_3)}],
-                compression: kafkajs.CompressionTypes.GZIP,
-            });
-
-            await delay(2000);
-            await kafkaApp.close();
+            // await kafkaApp.close();
         })();
     });
 });

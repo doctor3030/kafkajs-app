@@ -14,7 +14,7 @@ async function delay(time: number) {
 describe("Kafka connector tests", () => {
     it("Test", () => {
         (async () => {
-            const KAFKA_BOOTSTRAP_SERVERS = '10.0.0.74:9092';
+            const KAFKA_BOOTSTRAP_SERVERS = '127.0.0.1:9092';
             // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
             const TEST_MESSAGE: Record<string, string> = {msg: "Hello!"};
@@ -33,7 +33,7 @@ describe("Kafka connector tests", () => {
                 if (payload.message.value) {
                     const receivedMessage: Record<string, string> = JSON.parse(payload.message.value.toString());
                     logger.info(`Test message: type: ${typeof TEST_MESSAGE}, message: ${TEST_MESSAGE.msg}`);
-                    logger.info(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage.msg}`);
+                    logger.info(`Received message: type: ${typeof receivedMessage}, message: ${receivedMessage['msg']}`);
                     chai.assert.deepEqual(TEST_MESSAGE, receivedMessage);
                 }
             }
@@ -41,7 +41,8 @@ describe("Kafka connector tests", () => {
             const configKafka: kafka.KafkaConnectorConfig = {
                 clientConfig: {
                     brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
-                    clientId: `test_connector_${uuid()}`,
+                    // clientId: `test_connector_${uuid()}`,
+                    clientId: 'test_connector',
                     logLevel: kafkajs.logLevel.INFO,
                 },
                 listenerConfig: {
@@ -90,6 +91,23 @@ describe("Kafka connector tests", () => {
                             pendingDuration: ${listener.payload.pendingDuration},
                             sentAt: ${listener.payload.sentAt},
                             size: ${listener.payload.size}`);
+                        },
+                        "consumer.commit_offsets": (listener: kafkajs.ConsumerCommitOffsetsEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            groupId: ${listener.payload.groupId},
+                            memberId: ${listener.payload.memberId},
+                            groupGenerationId: ${listener.payload.groupGenerationId},
+                            topics: ${JSON.stringify(listener.payload.topics)}`);
+                        },
+                        "consumer.heartbeat": (listener: kafkajs.ConsumerHeartbeatEvent) => {
+                            logger.info(`Custom callback "${listener.type}".
+                            id: ${listener.id},
+                            timestamp: ${listener.timestamp},
+                            groupId: ${listener.payload.groupId},
+                            memberId: ${listener.payload.memberId},
+                            groupGenerationId: ${listener.payload.groupGenerationId},`);
                         },
                     }
                 },
