@@ -2,7 +2,6 @@ import {KafkaApp, KafkaAppConfig} from "../kafka_app"
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
 import {Levels} from "winston-logger-kafka";
-import * as chai from "chai";
 import "mocha";
 import {v4 as uuid} from "uuid";
 
@@ -24,12 +23,11 @@ describe("Kafka app tests", () => {
     it("Test", () => {
         (async () => {
             const KAFKA_BOOTSTRAP_SERVERS = '127.0.0.1:9092';
-            // const KAFKA_BOOTSTRAP_SERVERS = "192.168.2.190:9092";
             const TEST_TOPIC = "test_topic";
 
             const N_MESSAGES = 2000
 
-            const MESSAGES = (() => {
+            const messages = (() => {
                 const msgs: Message[] = [];
                 for (let i = 1; i < N_MESSAGES + 1; i++) {
                     msgs.push({
@@ -41,7 +39,7 @@ describe("Kafka app tests", () => {
                 return msgs
             })()
 
-            let handledTotal = 0;
+            let msgCounter = 0;
 
             process.on("SIGINT", shutdown);
             process.on("SIGTERM", shutdown);
@@ -85,42 +83,42 @@ describe("Kafka app tests", () => {
                     autoCommit: false,
                     eachBatchAutoResolve: false,
                     partitionsConsumedConcurrently: 4,
-                    consumerCallbacks: {
-                        "consumer.commit_offsets": (listener: kafkajs.ConsumerCommitOffsetsEvent) => {
-                            logger.info(`Custom callback "${listener.type}".
-                            id: ${listener.id},
-                            timestamp: ${listener.timestamp},
-                            groupId: ${listener.payload.groupId},
-                            memberId: ${listener.payload.memberId},
-                            groupGenerationId: ${listener.payload.groupGenerationId},
-                            topics: ${JSON.stringify(listener.payload.topics)}`);
-                        },
-                        "consumer.heartbeat": (listener: kafkajs.ConsumerHeartbeatEvent) => {
-                            logger.info(`Custom callback "${listener.type}".
-                            id: ${listener.id},
-                            timestamp: ${listener.timestamp},
-                            groupId: ${listener.payload.groupId},
-                            memberId: ${listener.payload.memberId},
-                            groupGenerationId: ${listener.payload.groupGenerationId},`);
-                        },
-                    }
+                    // consumerCallbacks: {
+                    //     "consumer.commit_offsets": (listener: kafkajs.ConsumerCommitOffsetsEvent) => {
+                    //         logger.info(`Custom callback "${listener.type}".
+                    //         id: ${listener.id},
+                    //         timestamp: ${listener.timestamp},
+                    //         groupId: ${listener.payload.groupId},
+                    //         memberId: ${listener.payload.memberId},
+                    //         groupGenerationId: ${listener.payload.groupGenerationId},
+                    //         topics: ${JSON.stringify(listener.payload.topics)}`);
+                    //     },
+                    //     "consumer.heartbeat": (listener: kafkajs.ConsumerHeartbeatEvent) => {
+                    //         logger.info(`Custom callback "${listener.type}".
+                    //         id: ${listener.id},
+                    //         timestamp: ${listener.timestamp},
+                    //         groupId: ${listener.payload.groupId},
+                    //         memberId: ${listener.payload.memberId},
+                    //         groupGenerationId: ${listener.payload.groupGenerationId},`);
+                    //     },
+                    // }
                 },
                 producerConfig: {
                     allowAutoTopicCreation: false,
-                    producerCallbacks: {
-                        "producer.connect": () => (listener: kafkajs.ConnectEvent) => {
-                            logger.info(`Custom callback "${listener.type}".
-                            id: ${listener.id},
-                            timestamp: ${listener.timestamp},
-                            payload: ${listener.payload}`);
-                        },
-                        "producer.disconnect": (listener: kafkajs.DisconnectEvent) => {
-                            logger.info(`Custom callback "${listener.type}".
-                            id: ${listener.id},
-                            timestamp: ${listener.timestamp},
-                            payload: ${listener.payload}`);
-                        }
-                    }
+                    // producerCallbacks: {
+                    //     "producer.connect": () => (listener: kafkajs.ConnectEvent) => {
+                    //         logger.info(`Custom callback "${listener.type}".
+                    //         id: ${listener.id},
+                    //         timestamp: ${listener.timestamp},
+                    //         payload: ${listener.payload}`);
+                    //     },
+                    //     "producer.disconnect": (listener: kafkajs.DisconnectEvent) => {
+                    //         logger.info(`Custom callback "${listener.type}".
+                    //         id: ${listener.id},
+                    //         timestamp: ${listener.timestamp},
+                    //         payload: ${listener.payload}`);
+                    //     }
+                    // }
                 },
                 logger: logger,
                 kafkaLogger: kafkaLogger,
@@ -140,37 +138,33 @@ describe("Kafka app tests", () => {
                 request_id: ${message.request_id},
                 payload: ${message.payload}`);
 
-                handledTotal++;
-                logger.info(`Total handeled: ${handledTotal}`)
-
-                if (handledTotal === N_MESSAGES) {
-                    logger.info('Consumed all messages.')
-                    shutdown();
-                }
+                msgCounter++;
+                logger.info(`Handled message ${msgCounter}/${messages.length}`)
             }
 
             kafkaApp.on('test_event', async (message) => {
                 logMessage(message);
-                await delay(10);
             })
 
             await kafkaApp.run();
 
-            await delay(2000);
-            for (const msg of MESSAGES) {
-                await kafkaApp.emit({
-                    topic: TEST_TOPIC,
-                    messages: [{value: JSON.stringify(msg)}],
-                    compression: kafkajs.CompressionTypes.GZIP,
-                });
+            await kafkaApp.emit({
+                topic: TEST_TOPIC,
+                messages: messages.map((msg) => {
+                    return {value: JSON.stringify(msg)}
+                }),
+                compression: kafkajs.CompressionTypes.GZIP,
+            });
 
-                await delay(10);
-            }
-
-
-
-            await delay(2000);
-            // await kafkaApp.close();
+            const watcherInterval = setInterval(
+                async () => {
+                    if (msgCounter === messages.length) {
+                        clearInterval(watcherInterval); // Exit the loop if stop is true and queue is empty
+                        logger.info(`Received all messages (${msgCounter}) and now closing...`)
+                        shutdown()
+                    }
+                },
+                1);
         })();
     });
 });

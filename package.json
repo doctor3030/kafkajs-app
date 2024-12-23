@@ -1,6 +1,6 @@
 {
   "name": "kafkajs-app",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Kafka connector based on kafkajs.",
   "files": [
     "/**/*.js",
@@ -9,7 +9,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc --declaration",
+    "build": "tsc --build --force",
     "test": "mocha -r ts-node/register 'src/tests/test_connector.ts' && mocha -r ts-node/register 'src/tests/test_app.ts' && mocha -r ts-node/register 'src/tests/test_app_big_load.ts'",
     "format": "prettier --print-width 160 --tab-width 4 --write 'src/**/*.ts' 'src/tests/**/*.ts'",
     "lint": "tslint -p tsconfig.json",
@@ -39,7 +39,8 @@
     "prettier": "^2.5.1",
     "ts-node": "^10.4.0",
     "tslint": "^6.1.3",
-    "tslint-config-prettier": "^1.18.0"
+    "tslint-config-prettier": "^1.18.0",
+    "redis": "^4.0.4"
   },
   "dependencies": {
     "@types/node": "^17.0.0",
