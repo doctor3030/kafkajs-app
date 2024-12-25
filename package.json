@@ -10,7 +10,7 @@
   "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc --build --force",
-    "test": "mocha -r ts-node/register 'src/tests/test_connector.ts' && mocha -r ts-node/register 'src/tests/test_app.ts' && mocha -r ts-node/register 'src/tests/test_app_big_load.ts'",
+    "test": "mocha -r ts-node/register 'src/tests/test_connector.ts' && mocha -r ts-node/register 'src/tests/test_app.ts' && mocha -r ts-node/register 'src/tests/test_app_big_load.ts'  && mocha -r ts-node/register 'src/tests/test_app_emit_with_response.ts'  && mocha -r ts-node/register 'src/tests/test_app_emit_with_response_custom_pipe.ts'  && mocha -r ts-node/register 'src/tests/test_app_pipelines.ts'  && mocha -r ts-node/register 'src/tests/test_app_pipelines_pipe_events.ts'  && mocha -r ts-node/register 'src/tests/test_app_pipelines_pipe_events_custom_pipe.ts'",
     "format": "prettier --print-width 160 --tab-width 4 --write 'src/**/*.ts' 'src/tests/**/*.ts'",
     "lint": "tslint -p tsconfig.json",
     "prepare": "npm run build",
