@@ -1,11 +1,19 @@
 import {KafkaApp, KafkaAppConfig, KafkaMessageMetadata} from "../kafka_app"
-import {MessagePipeline, MessageTransaction} from "../kafka_app_pipeline"
+import {
+    MessagePipeline,
+    MessageTransaction,
+    PipeEventFunction,
+    PipeEventWithResponseFunction
+} from "../kafka_app_pipeline"
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
 import {Levels} from "winston-logger-kafka";
+import * as chai from "chai";
 import "mocha";
 import {v4 as uuid} from "uuid";
 import {createClient, RedisClientType} from 'redis';
+import {expect} from "chai";
+import * as kafka from "kafkajs";
 
 const path = require("path");
 
@@ -74,10 +82,12 @@ async function printResultCompany(message: Message, logger: any, kwargs: Record<
     return message;
 }
 
+
 enum Events {
     PROCESS_PERSON = 'process_person',
     PERSON_ADD_MIDDLE_NAME = 'person_add_middle_name',
     PERSON_MULTIPLY_AGE = 'person_multiply_age',
+    PERSON_MULTIPLY_AGE_RETURN = 'person_multiply_age_return',
     PERSON_PROCESSED = 'person_processed',
 
     PROCESS_COMPANY = 'process_company',
@@ -202,12 +212,89 @@ describe("Kafka app tests", () => {
             const cacheClient = createClient({
                 url: `redis://127.0.0.1:6379`,
                 password: 'pass',
-                database: 0
+                database: 0,
+                name: 'RedisClient'
             });
             cacheClient.on('error', (err: any) => loggerRedis.error(`Cache client: ${err}`));
             cacheClient.on('ready', () => loggerRedis.info('Cache client connected.'));
             cacheClient.on('end', () => loggerRedis.info('Cache client disconnected.'));
             await cacheClient.connect();
+
+            async function app2PersonAgePipelinePipeResult(
+                appId: string | null,
+                pipelineName: string | null,
+                message: any,
+                emitter: (record: kafka.ProducerRecord) => Promise<kafka.RecordMetadata[]>,
+                messageKeyAsEvent: boolean,
+                fncPipeEvent: PipeEventFunction,
+                fncPipeEventWithResponse: PipeEventWithResponseFunction,
+                logger: any,
+                metadata: KafkaMessageMetadata
+            ) {
+                const responseMsg = await fncPipeEventWithResponse(
+                    appId,
+                    pipelineName,
+                    message,
+                    emitter,
+                    messageKeyAsEvent,
+                    {
+                        pipeEventName: Events.PERSON_MULTIPLY_AGE_RETURN,
+                        pipeToTopic: Topics.APP_3,
+                        withResponseOptions: {
+                            responseEventName: Events.PERSON_MULTIPLY_AGE_RETURN,
+                            responseFromTopic: Topics.APP_2,
+                            cacheClient: cacheClient,
+                            returnEventTimeout: PIPED_EVENT_RETURN_TIMEOUT
+                        }
+                    },
+                    logger,
+                    metadata
+                );
+
+                const person = responseMsg.payload;
+                logger.info(`Person's age will be ${person.age}`);
+
+                await fncPipeEvent(
+                    pipelineName,
+                    message,
+                    emitter,
+                    messageKeyAsEvent,
+                    {
+                        pipeEventName: Events.PERSON_MULTIPLY_AGE,
+                        pipeToTopic: Topics.APP_3
+                    },
+                    logger,
+                    metadata
+                )
+            }
+
+            async function app3PersonAgePipelinePipeResult(
+                appId: string | null,
+                pipelineName: string | null,
+                message: any,
+                emitter: (record: kafka.ProducerRecord) => Promise<kafka.RecordMetadata[]>,
+                messageKeyAsEvent: boolean,
+                fncPipeEvent: PipeEventFunction,
+                fncPipeEventWithResponse: PipeEventWithResponseFunction,
+                logger: any,
+                metadata: KafkaMessageMetadata
+            ) {
+                const person = message.payload;
+                logger.info(`Person's age is ${Math.floor(person.age / 2) === 0 ? 'EVEN' : 'ODD'}!`)
+
+                await fncPipeEvent(
+                    pipelineName,
+                    message,
+                    emitter,
+                    messageKeyAsEvent,
+                    {
+                        pipeEventName: Events.PERSON_PROCESSED,
+                        pipeToTopic: Topics.APP_1
+                    },
+                    logger,
+                    metadata
+                )
+            }
 
             const app1ProcessPersonPipeline = new MessagePipeline({
                 name: 'app1ProcessPersonPipeline',
@@ -231,9 +318,13 @@ describe("Kafka app tests", () => {
                             divider: '-',
                             midName: 'Joe'
                         },
-                        pipeResultOptions: {
-                            pipeEventName: Events.PERSON_MULTIPLY_AGE,
-                            pipeToTopic: Topics.APP_3
+                        pipeResultOptionsCustom: {
+                            fnc: app2PersonAgePipelinePipeResult,
+                            withResponseOptions: {
+                                responseEventTopicKeys: [[Topics.APP_2, Events.PERSON_MULTIPLY_AGE_RETURN]],
+                                cacheClient: cacheClient,
+                                returnEventTimeout: PIPED_EVENT_RETURN_TIMEOUT
+                            }
                         }
                     }
                 ],
@@ -247,9 +338,24 @@ describe("Kafka app tests", () => {
                         args: {
                             multiplier: 2,
                         },
+                        pipeResultOptionsCustom: {
+                            fnc: app3PersonAgePipelinePipeResult
+                        }
+                    }
+                ],
+                logger: logger3
+            })
+            const app3ProcessPersonPipelineReturn = new MessagePipeline({
+                name: 'app3ProcessPersonPipelineReturn',
+                transactions: [
+                    {
+                        fnc: personMultiplyAge,
+                        args: {
+                            multiplier: 2,
+                        },
                         pipeResultOptions: {
-                            pipeEventName: Events.PERSON_PROCESSED,
-                            pipeToTopic: Topics.APP_1
+                            pipeEventName: Events.PERSON_MULTIPLY_AGE_RETURN,
+                            pipeToTopic: Topics.APP_2
                         }
                     }
                 ],
@@ -328,6 +434,7 @@ describe("Kafka app tests", () => {
             }
             const pipelinesMapApp3 = {
                 person_multiply_age: app3ProcessPersonPipeline,
+                person_multiply_age_return: app3ProcessPersonPipelineReturn,
                 company_double_stock_price: app3ProcessCompanyPipeline
             }
 

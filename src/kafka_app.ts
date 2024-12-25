@@ -8,7 +8,6 @@ import {
 import {MessagePipeline} from "./kafka_app_pipeline"
 import {KafkaMessage, Offsets, PartitionOffset} from "kafkajs";
 import {createHash} from "crypto"
-import {log} from "async";
 
 
 const path = require("path");
@@ -36,6 +35,8 @@ export interface KafkaAppConfig {
     pipelinesMap?: Record<string, MessagePipeline>
     maxConcurrentTasks?: number
     maxConcurrentPipelines?: number
+    taskBufferMaxSize?: number
+    taskBufferMaxSizeBytes?: number
     logger?: ILogger
     kafkaLogger?: ILogger
 
@@ -78,9 +79,11 @@ export class KafkaApp {
     public kafkaListener!: KafkaListener;
     public kafkaProducer!: KafkaProducer;
     public readonly eventMap: Record<string, ((message: any, metadata: KafkaMessageMetadata) => void) | ((message: any, metadata: KafkaMessageMetadata) => Promise<void>)>;
-    public pipelinesMap: Record<string, MessagePipeline>
+    public pipelinesMap: Record<string, MessagePipeline>;
     public maxConcurrentTasks: number;
-    public maxConcurrentPipelines: number
+    public maxConcurrentPipelines: number;
+    public taskBufferMaxSize: number
+    public taskBufferMaxSizeBytes: number
     public readonly logger: ILogger;
 
     private syncTasksQueue: SyncTask[]
@@ -187,6 +190,8 @@ export class KafkaApp {
 
         this.maxConcurrentTasks = this.config.maxConcurrentTasks ? this.config.maxConcurrentTasks : 100;
         this.maxConcurrentPipelines = this.config.maxConcurrentPipelines ? this.config.maxConcurrentPipelines : 100;
+        this.taskBufferMaxSize = this.config.taskBufferMaxSize ? this.config.taskBufferMaxSize : 128;
+        this.taskBufferMaxSizeBytes = this.config.taskBufferMaxSizeBytes ? this.config.taskBufferMaxSizeBytes : 134217728;
 
         this.stop = false;
     }
@@ -194,7 +199,6 @@ export class KafkaApp {
     private async init() {
         this.kafkaListener = await this._kafkaConnector.getListener();
         this.kafkaProducer = await this._kafkaConnector.getProducer();
-        // this.logger.info(`${this.config.appName} is up and running.`);
     }
 
     public static async create(config: KafkaAppConfig) {
@@ -226,7 +230,6 @@ export class KafkaApp {
     private async cachePipeResponse(
         message: any,
         logger: any,
-        // cacheClient: any,
         kwargs: Record<string, any>
     ): Promise<any> {
         try {
@@ -258,45 +261,39 @@ export class KafkaApp {
             .digest('hex')
     }
 
-    // private getEventCallback(topic: string, messageValue: any, messageKey: string | null) {
-    //     if (messageValue) {
-    //         let cbKey: string;
-    //         let cb: (message: any, metadata: KafkaMessageMetadata) => void;
-    //
-    //         if (this.config.messageKeyAsEvent) {
-    //             if (!messageKey) {
-    //                 return null
-    //             }
-    //
-    //             cbKey = [topic, messageKey].join('.');
-    //             cb = this.eventMap[cbKey]
-    //
-    //         } else {
-    //             const event = messageValue['event'];
-    //             if (!event) {
-    //                 throw Error('"event" property is missing in message.value object. ' +
-    //                     'Provide "event" property or set "message_key_as_event" option to True ' +
-    //                     'to use message.key as event name.')
-    //             }
-    //
-    //             cbKey = [topic, event].join('.');
-    //             cb = this.eventMap[cbKey]
-    //         }
-    //
-    //         return {messageKey, cb}
-    //     } else {
-    //         return null
-    //     }
-    // }
+    private getQueueSize(sizeBytes: boolean = false): number {
+        const syncTaskPayloads = this.syncTasksQueue.map((task) => {
+            return JSON.stringify(task.message);
+        });
+        const asyncTasksPayloads = this.asyncTasksQueue.map((task) => {
+            return JSON.stringify(task.message);
+        });
+        const pipelinePayloads = this.pipelinesQueue.map((task) => {
+            return JSON.stringify(task.message);
+        });
+        const cachingPayloads = this.cachingQueue.map((task) => {
+            return JSON.stringify(task.message);
+        });
+        const syncTasksQueueSizeBytes = this.syncTasksQueue.length > 0 ? Buffer.byteLength(JSON.stringify(syncTaskPayloads)) : 0;
+        const asyncTasksQueueSizeBytes = this.asyncTasksQueue.length > 0 ? Buffer.byteLength(JSON.stringify(asyncTasksPayloads)) : 0;
+        const pipelinesQueueSizeBytes = this.pipelinesQueue.length > 0 ? Buffer.byteLength(JSON.stringify(pipelinePayloads)) : 0;
+        const cachingQueueSizeBytes = this.cachingQueue.length > 0 ? Buffer.byteLength(JSON.stringify(cachingPayloads)) : 0;
 
-    // private counters = {
-    //     nBatch: 0,
-    //     nMsg: 0
-    // }
+        if (sizeBytes) {
+            return syncTasksQueueSizeBytes
+                + asyncTasksQueueSizeBytes
+                + pipelinesQueueSizeBytes
+                + cachingQueueSizeBytes;
+        } else {
+            return this.syncTasksQueue.length
+                + this.asyncTasksQueue.length
+                + this.pipelinesQueue.length
+                + this.cachingQueue.length;
+        }
+    }
 
     private async processBatch(payload: kafka.EachBatchPayload) {
         try {
-            // this.counters.nBatch++;
 
             if (this.config.middlewareBatchCb) {
                 this.config.middlewareBatchCb(payload);
@@ -338,89 +335,6 @@ export class KafkaApp {
                 })
             )
 
-            // for (const message of payload.batch.messages) {
-            //     const messageValue = (val => {
-            //         if (val) {
-            //             if (this.config.listenerConfig?.valueDeserializer) {
-            //                 return this.config.listenerConfig.valueDeserializer(val)
-            //             } else {
-            //                 return JSON.parse(val.toString())
-            //             }
-            //         } else {
-            //             return null
-            //         }
-            //     })(message.value);
-            //
-            //     const messageKey = (val => {
-            //         if (val) {
-            //             if (this.config.listenerConfig?.keyDeserializer) {
-            //                 return this.config.listenerConfig.keyDeserializer(val)
-            //             } else {
-            //                 return val.toString()
-            //             }
-            //         } else {
-            //             return null
-            //         }
-            //     })(message.key);
-            //
-            //     const eventCallback = this.getEventCallback(payload.batch.topic, messageValue, messageKey)
-            //
-            //     const messageMetadata: KafkaMessageMetadata = {
-            //         topic: payload.batch.topic,
-            //         partition: payload.batch.partition,
-            //         highWatermark: payload.batch.highWatermark,
-            //         timestamp: message.timestamp,
-            //         size: message.size,
-            //         attributes: message.attributes,
-            //         offset: message.offset,
-            //         headers: message.headers
-            //     };
-            //
-            //     if (eventCallback) {
-            //         if (eventCallback.cb.constructor.name === "AsyncFunction") {
-            //             await eventCallback.cb(messageValue, messageMetadata);
-            //         } else {
-            //             eventCallback.cb(messageValue, messageMetadata);
-            //         }
-            //     }
-            //
-            //     const listenerConfig = this.config.listenerConfig
-            //     if (!listenerConfig?.autoCommit && !listenerConfig?.eachBatchAutoResolve) {
-            //         payload.resolveOffset(message.offset);
-            //
-            //         const offsets: Offsets = {
-            //             topics: [{
-            //                 topic: payload.batch.topic,
-            //                 partitions: [{
-            //                     partition: payload.batch.partition,
-            //                     offset: (Number(message.offset) + 1).toString()
-            //                 }]
-            //             }]
-            //         };
-            //         await payload.commitOffsetsIfNecessary(offsets);
-            //         await payload.heartbeat();
-            //     }
-            // }
-
-            // const listenerConfig = this.config.listenerConfig
-            // if (!listenerConfig?.autoCommit && !listenerConfig?.eachBatchAutoResolve) {
-            //     // payload.resolveOffset(message.offset);
-            //
-            //     const offsets: Offsets = {
-            //         topics: [{
-            //             topic: payload.batch.topic,
-            //             partitions: payload.batch.messages.map((msg) => {
-            //                 return {
-            //                     partition: payload.batch.partition,
-            //                     offset: (Number(msg.offset) + 1).toString()
-            //                 } as PartitionOffset
-            //             })
-            //         }]
-            //     };
-            //     await payload.commitOffsetsIfNecessary(offsets);
-            //     await payload.heartbeat();
-            // }
-
         } catch (e: any) {
             const msg = `processBatch => Exception: 
             message: ${e.message}; 
@@ -431,7 +345,6 @@ export class KafkaApp {
 
     private async processMessage(message: KafkaMessage, metadata: KafkaMessageMetadata) {
         try {
-            // this.counters.nMsg++
 
             const messageValue = (val => {
                 if (val) {
@@ -520,6 +433,7 @@ export class KafkaApp {
     }
 
     public async run() {
+        await this.processCheckTaskBuffer();
         await this.kafkaListener.listen();
         await this.processSyncTasks();
         await this.processAsyncTasks();
@@ -549,7 +463,7 @@ export class KafkaApp {
         return await this.kafkaProducer.send(record);
     }
 
-    public async emitWithResponse(record: kafka.ProducerRecord): Promise<{payload: any, error: string | null}> {
+    public async emitWithResponse(record: kafka.ProducerRecord): Promise<{ payload: any, error: string | null }> {
         try {
             if (!this.config.emitWithResponseOptions) {
                 throw Error('Please provide emitWithResponseOptions in the application config.')
@@ -591,27 +505,6 @@ export class KafkaApp {
                     1);
             });
 
-            // let result: any | null;
-            // const interval = setInterval(
-            //     async () => {
-            //         console.log('AAAAAAAAAAAAAAA')
-            //         const response = await this.config.emitWithResponseOptions?.cacheClient.get(this.getEventIdHash(eventId));
-            //
-            //         if (response) {
-            //             clearInterval(interval);
-            //             result = JSON.parse(response);
-            //         }
-            //
-            //         if (Date.now() - timeUp > this.config.emitWithResponseOptions?.returnEventTimeout!) {
-            //             clearInterval(interval);
-            //             throw new Error(
-            //                 `Emit event with response timeout: to: ${record.topic}; event_id: ${eventId}`
-            //             )
-            //         }
-            //
-            //     },
-            //     1);
-
             return {payload: result, error: null};
         } catch (e: any) {
             const msg = `emit_with_response => Exception: message: ${e.message}; stack: ${e.stack};`;
@@ -622,20 +515,6 @@ export class KafkaApp {
 
 
     private async processSyncTasks() {
-        // while (true) {
-        //     if (this.stop && this.syncTasksQueue.length === 0) {
-        //         break; // Exit the loop if stop is true and queue is empty
-        //     }
-        //
-        //     // Pick task from the queue
-        //     const task = this.syncTasksQueue.shift();
-        //     if (task) {
-        //         const {handle, message, metadata} = task;
-        //         // Execute transaction function of the task
-        //         handle(message, metadata);
-        //     }
-        // }
-
         const interval = setInterval(
             () => {
                 // console.log(`processSyncTasks: stop = ${this.stop}; syncTasksQueue.length = ${this.syncTasksQueue.length === 0}`)
@@ -644,9 +523,7 @@ export class KafkaApp {
                 }
 
                 const task = this.syncTasksQueue.shift();
-                // console.log(`this.syncTasksQueue.length = ${this.syncTasksQueue.length}`)
-                // console.log(JSON.stringify(task))
-                // console.log(JSON.stringify(this.counters))
+
                 if (task) {
                     const {handle, message, metadata} = task;
                     // Execute transaction function of the task
@@ -658,33 +535,8 @@ export class KafkaApp {
     }
 
     private async processAsyncTasks() {
-        // while (true) {
-        //     if (this.stop && this.asyncTasksQueue.length === 0) {
-        //         break; // Exit the loop if stop is true and queue is empty
-        //     }
-        //
-        //     // Get tasks batch
-        //     const batchSize = Math.min(this.maxConcurrentTasks, this.asyncTasksQueue.length);
-        //     const batch: AsyncTask[] = [];
-        //
-        //     for (let i = 0; i < batchSize; i++) {
-        //         const task = this.asyncTasksQueue.shift();
-        //         if (task) {
-        //             batch.push(task);
-        //         }
-        //     }
-        //
-        //     // Execute tasks from the batch concurrently
-        //     await Promise.all(
-        //         batch.map(async ({handle, message, metadata}) => {
-        //             await handle(message, metadata);
-        //         })
-        //     )
-        // }
-
         const interval = setInterval(
             async () => {
-                // console.log(`processAsyncTasks: stop = ${this.stop}; asyncTasksQueue.length = ${this.asyncTasksQueue.length === 0}`)
                 if (this.stop && this.asyncTasksQueue.length === 0) {
                     clearInterval(interval); // Exit the loop if stop is true and queue is empty
                 }
@@ -712,37 +564,8 @@ export class KafkaApp {
     }
 
     private async processPipelines() {
-        // while (true) {
-        //     if (this.stop && this.pipelinesQueue.length === 0) {
-        //         break; // Exit the loop if stop is true and queue is empty
-        //     }
-        //
-        //     // Get pipelines batch
-        //     const batchSize = Math.min(this.maxConcurrentPipelines, this.pipelinesQueue.length);
-        //     const batch: PipelineTask[] = [];
-        //
-        //     for (let i = 0; i < batchSize; i++) {
-        //         const task = this.pipelinesQueue.shift();
-        //         if (task) {
-        //             batch.push(task);
-        //         }
-        //     }
-        //
-        //     // Execute pipelines from the batch concurrently
-        //     await Promise.all(
-        //         batch.map(async ({pipeline, message, metadata}) => {
-        //             await pipeline.execute(
-        //                 message,
-        //                 this.emit,
-        //                 this.config.messageKeyAsEvent, metadata
-        //             );
-        //         })
-        //     )
-        // }
-
         const interval = setInterval(
             async () => {
-                // console.log(`processPipelines: stop = ${this.stop}; pipelinesQueue.length = ${this.pipelinesQueue.length === 0}`)
                 if (this.stop && this.pipelinesQueue.length === 0) {
                     clearInterval(interval); // Exit the loop if stop is true and queue is empty
                 }
@@ -774,37 +597,8 @@ export class KafkaApp {
     }
 
     private async processCaching() {
-        // while (true) {
-        //     if (this.stop && this.cachingQueue.length === 0) {
-        //         break; // Exit the loop if stop is true and queue is empty
-        //     }
-        //
-        //     // Get pipelines batch
-        //     const batchSize = Math.min(this.maxConcurrentPipelines, this.cachingQueue.length);
-        //     const batch: PipelineTask[] = [];
-        //
-        //     for (let i = 0; i < batchSize; i++) {
-        //         const task = this.cachingQueue.shift();
-        //         if (task) {
-        //             batch.push(task);
-        //         }
-        //     }
-        //
-        //     // Execute pipelines from the batch concurrently
-        //     await Promise.all(
-        //         batch.map(async ({pipeline, message, metadata}) => {
-        //             await pipeline.execute(
-        //                 message,
-        //                 this.emit,
-        //                 this.config.messageKeyAsEvent, metadata
-        //             );
-        //         })
-        //     )
-        // }
-
         const interval = setInterval(
             async () => {
-                // console.log(`processCaching: stop = ${this.stop}; cachingQueue.length = ${this.cachingQueue.length === 0}`)
                 if (this.stop && this.cachingQueue.length === 0) {
                     clearInterval(interval); // Exit the loop if stop is true and queue is empty
                 }
@@ -833,6 +627,33 @@ export class KafkaApp {
                 )
             },
             1);
+    }
+
+    private async processCheckTaskBuffer() {
+        const interval = setInterval(
+            () => {
+                if (this.stop) {
+                    clearInterval(interval); // Exit the loop if stop is true and queue is empty
+                }
+
+                const topics = this.config.listenerConfig.topics.map((val) => {
+                    return {topic: val.topic} as { topic: string };
+                });
+                const pausedTopics = this.kafkaListener.consumer.paused();
+
+                if (pausedTopics && pausedTopics.length > 0) {
+                    if (this.getQueueSize() < this.taskBufferMaxSize && this.getQueueSize(true) < this.taskBufferMaxSizeBytes) {
+                        this.kafkaListener.consumer.resume(topics);
+                        this.logger.info(`Consumption resume`)
+                    }
+                } else {
+                    if (this.getQueueSize() > this.taskBufferMaxSize || this.getQueueSize(true) > this.taskBufferMaxSizeBytes) {
+                        this.kafkaListener.consumer.pause(topics);
+                        this.logger.info(`Consumption paused due to task buffer size limitation`)
+                    }
+                }
+            },
+            1000);
     }
 
     public async close() {

@@ -3,11 +3,9 @@ import {MessagePipeline, MessageTransaction} from "../kafka_app_pipeline"
 import * as kafkajs from "kafkajs";
 import * as Logger from "winston-logger-kafka";
 import {Levels} from "winston-logger-kafka";
-import * as chai from "chai";
 import "mocha";
 import {v4 as uuid} from "uuid";
 import {createClient, RedisClientType} from 'redis';
-import {expect} from "chai";
 
 const path = require("path");
 
@@ -142,9 +140,9 @@ describe("Kafka app tests", () => {
                 password: 'pass',
                 database: 0
             });
-            cacheClient.on('error', (err: any) => loggerRedis.error(`Cache client ClientArticleCategories: ${err}`));
-            cacheClient.on('ready', () => loggerRedis.info('Cache client ClientArticleCategories connected.'));
-            cacheClient.on('end', () => loggerRedis.info('Cache client ClientArticleCategories disconnected.'));
+            cacheClient.on('error', (err: any) => loggerRedis.error(`Cache client: ${err}`));
+            cacheClient.on('ready', () => loggerRedis.info('Cache client connected.'));
+            cacheClient.on('end', () => loggerRedis.info('Cache client disconnected.'));
             await cacheClient.connect();
 
             const personPipeline = new MessagePipeline({

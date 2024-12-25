@@ -213,9 +213,6 @@ export class MessagePipeline {
         let headers = metadata.headers;
 
         if (headers) {
-            // for (const [x, y] of headers) {
-            //     headers[x] = new TextDecoder('utf-8').decode(y);
-            // }
             eventId = Buffer.isBuffer(headers.event_id) ? new TextDecoder('utf-8').decode(headers.event_id) : headers.event_id;
         }
 
@@ -224,10 +221,8 @@ export class MessagePipeline {
         }
 
         if (headers) {
-            // headers.event_id = new TextEncoder().encode(eventId);
             headers.event_id = eventId;
         } else {
-            // headers = {event_id: new TextEncoder().encode(eventId)}
             headers = {event_id: eventId}
         }
 
@@ -301,7 +296,7 @@ export class MessagePipeline {
         return new Promise((resolve, reject) => {
             const interval = setInterval(
                 async () => {
-                    const response = await cacheClient.get(this.getEventIdHash(eventId));
+                    const response = await cacheClient.get(MessagePipeline.getEventIdHash(eventId));
 
                     if (response) {
                         clearInterval(interval);

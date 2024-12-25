@@ -206,9 +206,9 @@ describe("Kafka app tests", () => {
                 password: 'pass',
                 database: 0
             });
-            cacheClient.on('error', (err: any) => loggerRedis.error(`Cache client ClientArticleCategories: ${err}`));
-            cacheClient.on('ready', () => loggerRedis.info('Cache client ClientArticleCategories connected.'));
-            cacheClient.on('end', () => loggerRedis.info('Cache client ClientArticleCategories disconnected.'));
+            cacheClient.on('error', (err: any) => loggerRedis.error(`Cache client: ${err}`));
+            cacheClient.on('ready', () => loggerRedis.info('Cache client connected.'));
+            cacheClient.on('end', () => loggerRedis.info('Cache client disconnected.'));
             await cacheClient.connect();
 
             const app2PersonMidNamePipeline = new MessagePipeline({

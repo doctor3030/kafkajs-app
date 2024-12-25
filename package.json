@@ -1,7 +1,7 @@
 {
   "name": "kafkajs-app",
   "version": "0.2.0",
-  "description": "Kafka connector based on kafkajs.",
+  "description": "Kafka application based on kafkajs.",
   "files": [
     "/**/*.js",
     "/**/*.d.ts"
