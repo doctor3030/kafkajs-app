@@ -1,6 +1,6 @@
 {
   "name": "kafkajs-app",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Kafka application based on kafkajs.",
   "files": [
     "/**/*.js",
