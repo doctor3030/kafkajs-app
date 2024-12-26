@@ -44,7 +44,7 @@ export interface TransactionPipeResultOptionsCustom {
 }
 
 export interface MessageTransaction {
-    fnc: (...args: any[]) => any;
+    fnc: (message: any, logger: any, kwargs: Record<string, any>) => any | Promise<any>;
     args?: { [key: string]: any };
     pipeResultOptions?: TransactionPipeResultOptions;
     pipeResultOptionsCustom?: TransactionPipeResultOptionsCustom;

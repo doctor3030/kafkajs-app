@@ -39,7 +39,6 @@ export interface KafkaAppConfig {
     taskBufferMaxSizeBytes?: number
     logger?: ILogger
     kafkaLogger?: ILogger
-
 }
 
 export interface KafkaMessageMetadata {

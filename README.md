@@ -14,7 +14,28 @@ npm install kafkajs-app
 
 Configuration parameters:
 
-- **app_name [OPTIONAL]**: application name.
+```typescript
+export interface KafkaAppConfig {
+    appName?: string
+    appId?: string
+    clientConfig: kafka.KafkaConfig
+    producerConfig?: ProducerConfig
+    listenerConfig: ListenerConfig
+    messageKeyAsEvent?: boolean
+    middlewareBatchCb?: (payload: kafka.EachBatchPayload) => void
+    emitWithResponseOptions?: EmitWithResponseOptions
+    pipelinesMap?: Record<string, MessagePipeline>
+    maxConcurrentTasks?: number
+    maxConcurrentPipelines?: number
+    taskBufferMaxSize?: number
+    taskBufferMaxSizeBytes?: number
+    logger?: ILogger
+    kafkaLogger?: ILogger
+}
+```
+
+- **appName [OPTIONAL]**: application name.
+- **appId [OPTIONAL]**: application ID.
 - **clientConfig**: kafka client config (see [kafkajs client configuration](https://kafka.js.org/docs/configuration)).
 - **producerConfig [OPTIONAL]**: kafka producer configuration
   (see [kafka connector](#connector) for details).
@@ -56,6 +77,27 @@ Configuration parameters:
 
 - **middlewareBatchCb [OPTIONAL]**: if provided, this callback will be executed with
   raw [EachBatchPayload](https://kafka.js.org/docs/consuming#eachbatch) as an argument before calling any handler.
+
+- **emitWithResponseOptions [OPTIONAL]**: see [emitWithResponse method](#use-appemitwithresponse-method-to-send-messages-to-kafka-and-wait-for-response-event)
+
+- **pipelinesMap [OPTIONAL]**: see [pipelines](#use-message-pipelines) usage.
+
+- **maxConcurrentTasks [OPTIONAL]**: number - number of individual event handlers executed concurrently
+- **maxConcurrentPipelines [OPTIONAL]**: number - number of pipelines executed concurrently
+- **taskBufferMaxSize [OPTIONAL]**: number - maximum number of buffered tasks
+- **taskBufferMaxSizeBytes [OPTIONAL]**: number - maximum size of task buffer in bytes
+
+> **_NOTE_** The messages obtained from kafka consumer are assigned a corresponding task 
+> that is either a standalone handler or a pipeline. 
+> The tasks are then buffered before being 
+> executed in batches (see **maxConcurrentTasks** and **maxConcurrentPipelines**) by corresponding worker.
+> The **taskBufferMaxSize** and **taskBufferMaxSizeBytes** options are needed to prevent memory 
+> overload when messages are consumed faster than being processed and task buffer gets overloaded.
+> When task buffer size reaches **taskBufferMaxSize** or **taskBufferMaxSizeBytes** 
+> the kafka listener is paused until some messages are processed 
+> and task buffer size reduces.
+> 
+> Default: taskBufferMaxSize: 128; taskBufferMaxSizeBytes: 134217728 (128 Mb)
 
 - **logger [OPTIONAL]**: any logger with standard log methods. If not provided,
   the [winston-logger-kafka](https://www.npmjs.com/package/winston-logger-kafka) is used with console transport and
@@ -112,7 +154,7 @@ const appConfig: KafkaAppConfig = {
         allowAutoTopicCreation: false,
         topics: [
             {
-                topic: TEST_TOPIC,
+                topic: "test_topic",
                 fromBeginning: false,
             },
         ],
@@ -182,6 +224,204 @@ app.on(
 );
 ```
 
+### Use message pipelines
+
+The **app.on** method is used to register a single handler for a message. 
+However, now it is possible to pass a message through a sequence of handlers
+by providing a **pipelines_map** option into the application config.
+The **pipelines_map** is an object of type **Record<string, MessagePipeline>**.
+
+**MessagePipeline** class has the following properties:
+- transactions: MessageTransaction[]
+- logger (optional): any object that has standard logging methods (debug, info, error, etc.)
+
+**MessageTransaction** properties:
+
+```typescript
+export interface MessageTransaction {
+    fnc: (message: any, logger: any, kwargs: Record<string, any>) => any | Promise<any>;
+    args?: { [key: string]: any };
+    pipeResultOptions?: TransactionPipeResultOptions;
+    pipeResultOptionsCustom?: TransactionPipeResultOptionsCustom;
+}
+```
+
+- fnc: (message: any, logger: any, kwargs: Record<string, any>) => any | Promise\<any\> - transaction function that takes message, somehow transforms it and returns it to next 
+transaction in the pipeline.
+> **_NOTE:_** Transaction function can be sync or async.
+- args (optional): Record<string, any> - collection of keyword arguments for transaction function.
+- pipeResultOptions (optional): TransactionPipeWithReturnOptions - configuration to pipe message to 
+another service.
+
+**TransactionPipeResultOptions** class properties:
+
+```typescript
+export interface TransactionPipeResultOptions {
+    pipeEventName: string;
+    pipeToTopic: string;
+    compression?: CompressionTypes;
+    acks?: number
+    timeout?: number;
+    withResponseOptions?: TransactionPipeWithReturnOptions;
+}
+```
+
+- pipeEventName: string - event name that will be sent
+- pipeToTopic: string - destination topic
+- compression (optional): CompressionTypes - type of compression for kafka message (see [kafkajs Producer](https://kafka.js.org/docs/producing) documentation).
+- acks (optional): number - see [kafkajs Producer](https://kafka.js.org/docs/producing) documentation.
+- timeout (optional): number - see [kafkajs Producer](https://kafka.js.org/docs/producing) documentation.
+- withResponseOptions (optional): TransactionPipeWithReturnOptions - this config is used when pipeline 
+needs to wait response from another service before proceeding to next transaction.
+
+**TransactionPipeWithReturnOptions** class properties:
+
+```typescript
+export interface TransactionPipeWithReturnOptions {
+    responseEventName: string;
+    responseFromTopic: string;
+    cacheClient: any;
+    returnEventTimeout: number;
+}
+```
+- responseEventName: string - event name of the response
+- responseFromTopic: string - topic name that the response should come from
+- cacheClient: any - client of any caching service that has methods **get** and **set**
+> **get** method signature: get(key: str) -> bytes
+> 
+> **set** method signature: set(name: str, value: bytes, ex: int (record expiration in sec))
+- returnEventTimeout: number - timeout in **milliseconds** for returned event
+
+**TransactionPipeResultOptionsCustom** class properties:
+
+> **_NOTE:_** Use this if you need to implement custom logic after transaction function is executed.
+
+```typescript
+export interface TransactionPipeResultOptionsCustom {
+    fnc: (
+        appId: string | null,
+        pipelineName: string | null,
+        message: any,
+        emitter: (record: kafka.ProducerRecord) => Promise<kafka.RecordMetadata[]>,
+        messageKeyAsEvent: boolean,
+        fncPipeEvent: PipeEventFunction,
+        fncPipeEventWithResponse: PipeEventWithResponseFunction,
+        logger: any,
+        metadata: KafkaMessageMetadata
+    ) => any;
+    withResponseOptions?: TransactionPipeWithReturnOptionsMultikey;
+}
+
+export type PipeEventFunction = (
+    pipelineName: string | null,
+    message: any,
+    emitter: (record: kafka.ProducerRecord) => Promise<kafka.RecordMetadata[]>,
+    messageKeyAsEvent: boolean,
+    options: TransactionPipeResultOptions,
+    logger: any,
+    metadata: KafkaMessageMetadata
+) => Promise<string | null>
+
+export type PipeEventWithResponseFunction = (
+    appId: string | null,
+    pipelineName: string | null,
+    message: any,
+    emitter: (record: kafka.ProducerRecord) => Promise<kafka.RecordMetadata[]>,
+    messageKeyAsEvent: boolean,
+    options: TransactionPipeResultOptions,
+    logger: any,
+    metadata: KafkaMessageMetadata
+) => Promise<any>
+
+interface TransactionPipeWithReturnOptionsMultikey {
+    responseEventTopicKeys: [string, string][];
+    cacheClient: any;
+    returnEventTimeout: number;
+}
+```
+
+- fnc: Callable - function that will be executed after transaction function is finished.
+- withResponseOptions (optional): TransactionPipeWithReturnOptionsMultikey - these option will be 
+used by **kafka app** to register caching pipelines. This is the same as **TransactionPipeWithReturnOptions** 
+but instead of separate options **responseEventName** and **responseFromTopic** there is a 
+list of tuples **(responseFromTopic, responseEventName)** called **responseEventTopicKeys**.
+
+#### Example:
+Suppose we receive a string with each message and that string needs to be processed.
+Let's say we need replace all commas with a custom symbol and then 
+add a number to the end of the string that correspond to the number of some
+substring occurrences.
+
+```typescript
+import * as kafkajs from "kafkajs";
+import * as kafka from "kafkajs-app";
+import {v4 as uuid} from "uuid";
+
+// Define transaction functions
+function txnReplace(message: string, logger: any, kwargs: Record<string, any>) {
+    return message.replace(',', kwargs.symbol);
+}
+
+function txnAddCount(message: string, logger: any, kwargs: Record<string, any>) {
+    return `${message} ${message.split(kwargs.substr).length - 1}`;
+}
+
+// Define a pipeline
+const pipeline = new MessagePipeline({
+    transactions: [
+        {
+            fnc: txnReplace,
+            args: {'symbol': '|'}
+        },
+        {
+            fnc: txnAddCount,
+            args: {'substr': 'foo'}
+        }
+    ]
+});
+
+// Define a pipelines map
+const pipelinesMap = {'some_event': pipeline};
+
+const appConfig = {
+    appId: uuid(),
+    appName: 'Test APP',
+    clientConfig: {
+        brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
+        clientId: 'test_connector_1',
+        logLevel: kafkajs.logLevel.INFO,
+    },
+    listenerConfig: {
+        topics: [
+            {
+                topic: 'test_topic1',
+                fromBeginning: false,
+            },
+        ],
+        groupId: "test_app_group",
+        sessionTimeout: 25000,
+        allowAutoTopicCreation: false,
+        autoCommit: false,
+        eachBatchAutoResolve: false,
+        partitionsConsumedConcurrently: 4,
+    },
+    producerConfig: {
+        allowAutoTopicCreation: false,
+    },
+    pipelinesMap: pipelinesMap,
+    maxConcurrentTasks: 128,
+    maxConcurrentPipelines: 128,
+    taskBufferMaxSize: 256
+};
+
+
+// Create application
+const app = await KafkaApp.create(appConfig);
+```
+
+> **_NOTE:_** Define pipelines_map keys in a format 'topic.event' in order
+> to restrict pipeline execution to events that come from a certain topic.
+
 ### Use **app.emit()** method to send messages to kafka:
 
 The app.emit() method just wraps up send() method of the kafkajs Producer. It takes kafkajs ProducerRecord as an
@@ -211,6 +451,100 @@ await app.emit({
     compression: CompressionTypes.GZIP
 }).then((metaData) => {
     console.log(metaData);
+});
+```
+
+### Use **app.emitWithResponse()** method to send messages to kafka and wait for response event:
+
+Specify **EmitWithResponseOptions** in the application config.
+
+**EmitWithResponseOptions** class properties:
+
+```typescript
+interface EmitWithResponseOptions {
+    topicEventList: [string, string][];
+    cacheClient: any;
+    returnEventTimeout: number; // milliseconds
+}
+```
+
+- topicEventList: list of tuples (topicName: string, eventName: string) for returned events. 
+This defines what events and from what topics should be cached as "response" events.
+- cacheClient: Any - client of any caching service that has methods **get** and **set**
+> get method signature: get(key: str) -> bytes
+> 
+> set method signature: set(name: str, value: bytes, ex: int (record expiration in sec))
+- returnEventTimeout: number - timeout in **milliseconds** for returned event
+
+```typescript
+import * as kafkajs from "kafkajs";
+import * as kafka from "kafkajs-app";
+import {v4 as uuid} from "uuid";
+
+// Create application config
+// config = AppConfig(
+//     app_name='Test application',
+//     bootstrap_servers=['localhost:9092'],
+//     consumer_config={
+//         'group_id': 'test_app_group'
+//     },
+//     listen_topics=['test_topic1'],
+//     emit_with_response_options=EmitWithReturnOptions(
+//         event_topic_list=[
+//             ("test_topic_2", "response_event_name")
+//         ],
+//         cache_client=redis_client,
+//         return_event_timeout=30
+//     ),
+// )
+
+const appConfig1: KafkaAppConfig = {
+    appId: uuid(),
+    appName: 'Test APP',
+    clientConfig: {
+        brokers: KAFKA_BOOTSTRAP_SERVERS.split(","),
+        clientId: 'test_connector_1',
+        logLevel: kafkajs.logLevel.INFO,
+    },
+    listenerConfig: {
+        topics: [
+            {
+                topic: test_topic1,
+                fromBeginning: false,
+            },
+        ],
+        groupId: "test_app_group",
+        sessionTimeout: 25000,
+        allowAutoTopicCreation: false,
+        autoCommit: false,
+        eachBatchAutoResolve: false,
+        partitionsConsumedConcurrently: 4,
+    },
+    producerConfig: {
+        allowAutoTopicCreation: false,
+    },
+    emitWithResponseOptions: {
+        topicEventList: [
+            ["test_topic_2", "responseEventName"],
+        ],
+        cacheClient: redisClient,
+        returnEventTimeout: 30000
+    }
+};
+
+// Create application
+const app = await KafkaApp.create(appConfig);
+
+// Message to send
+const msg = {
+    event: "test_event_name",
+    payload: "Hello?"
+}
+
+const response = await app.emitWithResponse({
+    topic: "some_topic",
+    messages: [{value: JSON.stringify(msg)}],
+    compression: kafkajs.CompressionTypes.GZIP,
 });
 ```
 
